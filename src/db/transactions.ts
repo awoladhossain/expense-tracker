@@ -5,6 +5,7 @@
 import type { SQLiteBindValue } from 'expo-sqlite';
 
 import { getDatabase } from './database';
+import { fromBengaliNumerals } from '@/utils/currency';
 import type { MonthString, DateString } from '@/utils/date';
 
 export type TransactionType = 'expense' | 'income';
@@ -87,6 +88,11 @@ export async function deleteTransaction(id: number): Promise<void> {
   await db.runAsync('DELETE FROM transactions WHERE id = ?;', [id]);
 }
 
+export async function getTransactionById(id: number): Promise<TransactionRow | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<TransactionRow>(`${WITH_CATEGORY} WHERE t.id = ?;`, [id]);
+}
+
 export async function getTransactionsByMonth(month: MonthString): Promise<TransactionRow[]> {
   const db = await getDatabase();
   return db.getAllAsync<TransactionRow>(`${WITH_CATEGORY} WHERE t.date LIKE ? ORDER BY t.date DESC, t.created_at DESC;`, [`${month}%`]);
@@ -100,6 +106,8 @@ export async function getRecentTransactions(limit: number): Promise<TransactionR
 export async function getTransactions(options?: {
   type?: TransactionType;
   query?: string;
+  startDate?: DateString;
+  endDate?: DateString;
   limit?: number;
 }): Promise<TransactionRow[]> {
   const db = await getDatabase();
@@ -111,12 +119,35 @@ export async function getTransactions(options?: {
     clauses.push('t.type = ?');
     params.push(options.type);
   }
+
+  if (options?.startDate) {
+    clauses.push('t.date >= ?');
+    params.push(options.startDate);
+  }
+
+  if (options?.endDate) {
+    clauses.push('t.date <= ?');
+    params.push(options.endDate);
+  }
+
   if (query) {
     const pattern = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-    clauses.push(
-      "(COALESCE(t.note, '') LIKE ? ESCAPE '\\' OR c.name_en LIKE ? ESCAPE '\\' OR c.name_bn LIKE ? ESCAPE '\\')",
-    );
+    const subClauses: string[] = [
+      "COALESCE(t.note, '') LIKE ? ESCAPE '\\'",
+      "c.name_en LIKE ? ESCAPE '\\'",
+      "c.name_bn LIKE ? ESCAPE '\\'",
+    ];
     params.push(pattern, pattern, pattern);
+
+    // Also match CAST(amount AS TEXT) if query has digits or Bengali numerals
+    const numericPart = fromBengaliNumerals(query).replace(/[^0-9.]/g, '');
+    if (numericPart.length > 0) {
+      subClauses.push("CAST(t.amount AS TEXT) LIKE ? ESCAPE '\\'");
+      const amountPattern = `%${numericPart.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+      params.push(amountPattern);
+    }
+
+    clauses.push(`(${subClauses.join(' OR ')})`);
   }
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';

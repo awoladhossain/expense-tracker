@@ -1,10 +1,13 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Calendar, Filter, Search } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,13 +15,32 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { ScreenHeader } from '@/components/screen-header';
 import { TransactionListItem } from '@/components/transaction-list-item';
-import { deleteTransaction, getTransactions, type TransactionRow, type TransactionType } from '@/db/transactions';
+import { AppInput } from '@/components/ui/app-input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { GlassCard } from '@/components/ui/glass-card';
+import { GradientButton } from '@/components/ui/gradient-button';
+import { Tokens } from '@/constants/tokens';
+import {
+  deleteTransaction,
+  getTransactions,
+  type TransactionRow,
+  type TransactionType,
+} from '@/db/transactions';
 import { useAppColors } from '@/hooks/useAppColors';
 import { useI18n } from '@/hooks/useI18n';
-import { relativeDate } from '@/utils/date';
+import {
+  currentMonth,
+  currentWeekRange,
+  getMonthRange,
+  relativeDate,
+  todayISO,
+  type DateString,
+} from '@/utils/date';
 
-type Filter = 'all' | TransactionType;
+type TypeFilter = 'all' | TransactionType;
+type DatePeriod = 'all' | 'today' | 'week' | 'month' | 'custom';
 
 type HistoryItem =
   | { kind: 'header'; id: string; title: string }
@@ -27,9 +49,19 @@ type HistoryItem =
 export default function HistoryScreen() {
   const colors = useAppColors();
   const { language, t } = useI18n();
+
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DatePeriod>('all');
+
+  // Custom date range modal state
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customStart, setCustomStart] = useState(todayISO());
+  const [customEnd, setCustomEnd] = useState(todayISO());
+  const [appliedCustomStart, setAppliedCustomStart] = useState<DateString | null>(null);
+  const [appliedCustomEnd, setAppliedCustomEnd] = useState<DateString | null>(null);
+
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -39,11 +71,32 @@ export default function HistoryScreen() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  // Compute startDate & endDate according to dateFilter
+  const dateRange = useMemo((): { start?: DateString; end?: DateString } => {
+    if (dateFilter === 'today') {
+      const today = todayISO();
+      return { start: today, end: today };
+    }
+    if (dateFilter === 'week') {
+      return currentWeekRange();
+    }
+    if (dateFilter === 'month') {
+      return getMonthRange(currentMonth());
+    }
+    if (dateFilter === 'custom' && appliedCustomStart && appliedCustomEnd) {
+      return { start: appliedCustomStart, end: appliedCustomEnd };
+    }
+    return {};
+  }, [dateFilter, appliedCustomStart, appliedCustomEnd]);
+
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       const rows = await getTransactions({
-        type: filter === 'all' ? undefined : filter,
+        type: typeFilter === 'all' ? undefined : typeFilter,
         query: debouncedQuery || undefined,
+        startDate: dateRange.start,
+        endDate: dateRange.end,
       });
       setTransactions(rows);
       setFailed(false);
@@ -53,7 +106,7 @@ export default function HistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, filter]);
+  }, [typeFilter, debouncedQuery, dateRange.start, dateRange.end]);
 
   useFocusEffect(
     useCallback(() => {
@@ -96,78 +149,310 @@ export default function HistoryScreen() {
     ]);
   }
 
-  const filters: { id: Filter; label: string }[] = [
+  const typeTabs: { id: TypeFilter; label: string }[] = [
     { id: 'all', label: t.history.filterAll },
     { id: 'expense', label: t.history.filterExpense },
     { id: 'income', label: t.history.filterIncome },
   ];
 
+  const dateChips: { id: DatePeriod; label: string }[] = [
+    { id: 'all', label: t.history.filterAll },
+    { id: 'today', label: t.history.filterToday },
+    { id: 'week', label: t.history.filterThisWeek },
+    { id: 'month', label: t.history.filterThisMonth },
+    { id: 'custom', label: t.history.filterCustom },
+  ];
+
+  const handleDateSelect = (id: DatePeriod) => {
+    if (id === 'custom') {
+      setShowCustomModal(true);
+    } else {
+      setDateFilter(id);
+    }
+  };
+
+  const handleApplyCustom = () => {
+    if (customStart && customEnd) {
+      setAppliedCustomStart(customStart <= customEnd ? customStart : customEnd);
+      setAppliedCustomEnd(customStart <= customEnd ? customEnd : customStart);
+      setDateFilter('custom');
+      setShowCustomModal(false);
+    }
+  };
+
   return (
     <Screen>
+      <ScreenHeader title={t.history.title} />
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>{t.history.title}</Text>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t.history.searchPlaceholder}
-          placeholderTextColor={colors.textDisabled}
-          style={[styles.search, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
-        />
-        <View style={styles.filters}>
-          {filters.map((item) => {
-            const selected = filter === item.id;
+        {/* Universal Search Bar */}
+        <View
+          style={[
+            styles.searchBar,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}>
+          <Search color={colors.textMuted} size={20} />
+          <TextInput
+            onChangeText={setQuery}
+            placeholder={t.history.searchPlaceholder}
+            placeholderTextColor={colors.textDisabled}
+            style={[styles.searchInput, { color: colors.text }]}
+            value={query}
+          />
+        </View>
+
+        {/* Type Segmented Control */}
+        <View style={[styles.typeSegments, { backgroundColor: colors.surfaceAlt }]}>
+          {typeTabs.map((item) => {
+            const isSelected = typeFilter === item.id;
             return (
               <Pressable
-                key={item.id}
                 accessibilityRole="button"
-                onPress={() => setFilter(item.id)}
+                key={item.id}
+                onPress={() => setTypeFilter(item.id)}
                 style={[
-                  styles.filter,
-                  {
-                    backgroundColor: selected ? colors.primary : colors.surface,
-                    borderColor: selected ? colors.primary : colors.border,
-                  },
+                  styles.typeSegment,
+                  { backgroundColor: isSelected ? colors.surface : 'transparent' },
                 ]}>
-                <Text style={[styles.filterLabel, { color: selected ? '#FFFFFF' : colors.text }]}>{item.label}</Text>
+                <Text
+                  style={[
+                    styles.typeSegmentLabel,
+                    { color: isSelected ? colors.text : colors.textMuted },
+                  ]}>
+                  {item.label}
+                </Text>
               </Pressable>
             );
           })}
         </View>
+
+        {/* Scrollable Date Filter Chips */}
+        <ScrollView
+          contentContainerStyle={styles.dateChipsScroll}
+          horizontal
+          showsHorizontalScrollIndicator={false}>
+          {dateChips.map((chip) => {
+            const isSelected = dateFilter === chip.id;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={chip.id}
+                onPress={() => handleDateSelect(chip.id)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: isSelected ? colors.primaryLight : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  },
+                ]}>
+                {isSelected && (
+                  <View style={[styles.activeDot, { backgroundColor: colors.primary }]} />
+                )}
+                {chip.id === 'custom' && (
+                  <Calendar
+                    color={isSelected ? colors.primary : colors.textMuted}
+                    size={14}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.chipLabel,
+                    { color: isSelected ? colors.primary : colors.text },
+                  ]}>
+                  {chip.id === 'custom' && appliedCustomStart && dateFilter === 'custom'
+                    ? `${appliedCustomStart} → ${appliedCustomEnd}`
+                    : chip.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
+
+      {/* List / Loader / EmptyState */}
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.loader} />
       ) : (
         <FlatList
+          contentContainerStyle={styles.list}
           data={failed ? [] : items}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={[styles.empty, { color: colors.textMuted }]}>
-              {failed ? t.common.error : t.history.noResults}
-            </Text>
+            <EmptyState
+              description={t.history.noResultsDesc}
+              icon={Filter}
+              title={t.history.noResults}
+            />
           }
           renderItem={({ item }) =>
             item.kind === 'header' ? (
-              <Text style={[styles.date, { color: colors.textMuted }]}>{item.title}</Text>
+              <Text style={[styles.dateHeader, { color: colors.textMuted }]}>
+                {item.title}
+              </Text>
             ) : (
-              <TransactionListItem transaction={item.transaction} onDelete={() => confirmDelete(item.transaction)} />
+              <TransactionListItem
+                onDelete={() => confirmDelete(item.transaction)}
+                transaction={item.transaction}
+              />
             )
           }
         />
       )}
+
+      {/* Custom Date Range Modal */}
+      <Modal animationType="fade" transparent visible={showCustomModal}>
+        <View style={styles.modalBackdrop}>
+          <GlassCard style={styles.modalCard}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t.history.filterCustom}
+            </Text>
+
+            <AppInput
+              label={t.history.from}
+              onChangeText={setCustomStart}
+              placeholder="YYYY-MM-DD"
+              value={customStart}
+            />
+
+            <AppInput
+              label={t.history.to}
+              onChangeText={setCustomEnd}
+              placeholder="YYYY-MM-DD"
+              value={customEnd}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowCustomModal(false)}
+                style={[styles.modalCancel, { borderColor: colors.border }]}>
+                <Text style={[styles.modalCancelText, { color: colors.text }]}>
+                  {t.common.cancel}
+                </Text>
+              </Pressable>
+              <GradientButton
+                onPress={handleApplyCustom}
+                style={styles.modalApply}
+                title={t.history.apply}
+              />
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 20, paddingTop: 8, gap: 12 },
-  title: { fontSize: 28, fontWeight: '700' },
-  search: { borderWidth: 1, borderRadius: 14, minHeight: 48, paddingHorizontal: 14, fontSize: 16 },
-  filters: { flexDirection: 'row', gap: 8, paddingBottom: 8 },
-  filter: { minHeight: 40, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  filterLabel: { fontSize: 14, fontWeight: '700' },
-  loader: { marginTop: 32 },
-  list: { paddingHorizontal: 20, paddingBottom: 32, gap: 10 },
-  date: { marginTop: 8, fontSize: 13, fontWeight: '700' },
-  empty: { textAlign: 'center', marginTop: 32, fontSize: 15 },
+  header: {
+    paddingHorizontal: Tokens.spacing.lg,
+    paddingTop: Tokens.spacing.sm,
+    gap: Tokens.spacing.md,
+    paddingBottom: Tokens.spacing.sm,
+  },
+  title: {
+    fontSize: Tokens.typography.hero.fontSize,
+    fontWeight: '700',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Tokens.radius.md,
+    minHeight: 48,
+    paddingHorizontal: Tokens.spacing.md,
+    gap: Tokens.spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: Tokens.typography.bodyLg.fontSize,
+  },
+  typeSegments: {
+    flexDirection: 'row',
+    borderRadius: Tokens.radius.md,
+    padding: 4,
+  },
+  typeSegment: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: Tokens.radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeSegmentLabel: {
+    fontSize: Tokens.typography.body.fontSize,
+    fontWeight: '700',
+  },
+  dateChipsScroll: {
+    flexDirection: 'row',
+    gap: Tokens.spacing.md,
+    paddingVertical: 2,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 16,
+    borderRadius: Tokens.radius.full,
+    borderWidth: 1,
+  },
+  chipLabel: {
+    fontSize: Tokens.typography.caption.fontSize,
+    fontWeight: '700',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: Tokens.radius.full,
+  },
+  loader: {
+    marginTop: 40,
+  },
+  list: {
+    paddingHorizontal: Tokens.spacing.lg,
+    paddingBottom: 40,
+    gap: Tokens.spacing.sm,
+  },
+  dateHeader: {
+    marginTop: Tokens.spacing.md,
+    marginBottom: Tokens.spacing.xs,
+    fontSize: Tokens.typography.caption.fontSize,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: Tokens.spacing.lg,
+  },
+  modalCard: {
+    padding: Tokens.spacing.xl,
+    gap: Tokens.spacing.md,
+  },
+  modalTitle: {
+    fontSize: Tokens.typography.title.fontSize,
+    fontWeight: '700',
+    marginBottom: Tokens.spacing.xs,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Tokens.spacing.md,
+    marginTop: Tokens.spacing.sm,
+  },
+  modalCancel: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    fontSize: Tokens.typography.bodyLg.fontSize,
+    fontWeight: '600',
+  },
+  modalApply: {
+    flex: 1,
+  },
 });

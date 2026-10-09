@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "expense-tracker",
+    "name": "Expense Tracker",
     "slug": "expense-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,9 +8,18 @@
     "scheme": "expensetracker",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.awolad.expensetracker",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "We use Face ID to secure your financial data."
+      }
     },
     "android": {
+      "package": "com.awolad.expensetracker",
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,11 +50,23 @@
           "imageWidth": 76
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "We use Face ID to secure your financial data."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
     }
   }
 }

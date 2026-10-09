@@ -3,7 +3,7 @@
  */
 
 export const DB_NAME = 'expense_tracker.db';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const LEVEL_HIGH_THRESHOLD = 0.9;
 export const LEVEL_MODERATE_THRESHOLD = 0.6;

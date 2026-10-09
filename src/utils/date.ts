@@ -73,6 +73,10 @@ export function getMonthRange(monthStr: MonthString): { start: DateString; end: 
   return { start, end };
 }
 
+export function getYearRange(year: number): { start: DateString; end: DateString } {
+  return { start: `${year}-01-01`, end: `${year}-12-31` };
+}
+
 export function toBengaliNumerals(value: number | string): string {
   const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
   return String(value).replace(/\d/g, (digit) => bengaliDigits[Number(digit)] ?? digit);

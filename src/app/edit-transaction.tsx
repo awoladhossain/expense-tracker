@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
-import { router, useFocusEffect } from 'expo-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,18 +23,27 @@ import { GradientButton } from '@/components/ui/gradient-button';
 import { useThemeColor } from '@/constants/colors';
 import { Tokens } from '@/constants/tokens';
 import { getCategoriesByType, type CategoryRow } from '@/db/categories';
-import { insertTransaction, type TransactionType } from '@/db/transactions';
+import {
+  getTransactionById,
+  updateTransaction,
+  type TransactionType,
+} from '@/db/transactions';
 import { useI18n } from '@/hooks/useI18n';
 import { useSettingsStore } from '@/store/settingsStore';
 import { formatMoney, getCurrencySymbol, parseAmount } from '@/utils/currency';
 import { addDays, formatDate, todayISO } from '@/utils/date';
 
-export default function AddScreen() {
+export default function EditTransactionScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const txId = Number(id);
+
   const colors = useThemeColor();
   const { language, t } = useI18n();
   const currency = useSettingsStore((state) => state.currency);
+
   const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [note, setNote] = useState('');
@@ -43,35 +52,70 @@ export default function AddScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Dynamic category fetch based on active type
   const loadCategories = useCallback(async (activeType: TransactionType) => {
-    setLoading(true);
+    setCategoriesLoading(true);
     try {
       const rows = await getCategoriesByType(activeType);
       setCategories(rows);
-    } catch (loadError) {
-      console.warn('Failed to load categories', loadError);
-      setError(t.common.error);
+    } catch (loadErr) {
+      console.warn('Failed to load categories', loadErr);
     } finally {
-      setLoading(false);
+      setCategoriesLoading(false);
     }
-  }, [t.common.error]);
+  }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadCategories(type);
-    }, [loadCategories, type])
-  );
+  useEffect(() => {
+    let active = true;
+
+    async function fetchTx() {
+      if (!txId || isNaN(txId)) {
+        setError(t.common.error);
+        setInitialLoading(false);
+        return;
+      }
+      try {
+        const tx = await getTransactionById(txId);
+        if (!active) return;
+        if (!tx) {
+          setError(t.history.noResults);
+          setInitialLoading(false);
+          return;
+        }
+
+        setAmount(String(tx.amount));
+        setType(tx.type);
+        setCategoryId(tx.category_id);
+        setDate(tx.date);
+        setNote(tx.note ?? '');
+
+        const catRows = await getCategoriesByType(tx.type);
+        if (active) {
+          setCategories(catRows);
+        }
+      } catch (fetchErr) {
+        console.warn('Failed to fetch transaction for editing', fetchErr);
+        if (active) setError(t.common.error);
+      } finally {
+        if (active) setInitialLoading(false);
+      }
+    }
+
+    fetchTx();
+
+    return () => {
+      active = false;
+    };
+  }, [t.common.error, t.history.noResults, txId]);
 
   const handleTypeChange = (nextType: TransactionType) => {
     if (nextType === type) return;
     setType(nextType);
-    setCategoryId(null); // Reset selection on switch to prevent category leakage
+    setCategoryId(null);
     setError(null);
     loadCategories(nextType);
   };
 
-  async function save() {
+  async function handleSave() {
     const parsed = parseAmount(amount);
     if (!amount.trim()) {
       setError(t.addExpense.errors.amountRequired);
@@ -89,7 +133,7 @@ export default function AddScreen() {
     setSaving(true);
     setError(null);
     try {
-      await insertTransaction({
+      await updateTransaction(txId, {
         amount: parsed,
         category_id: categoryId,
         type,
@@ -103,17 +147,9 @@ export default function AddScreen() {
         });
       }
 
-      // Fully reset form state
-      setAmount('');
-      setNote('');
-      setDate(todayISO());
-      setType('expense');
-      setCategoryId(null);
-      setError(null);
-
-      router.navigate('/');
+      router.back();
     } catch (saveError) {
-      console.warn('Failed to save transaction', saveError);
+      console.warn('Failed to update transaction', saveError);
       setError(t.common.error);
     } finally {
       setSaving(false);
@@ -123,13 +159,40 @@ export default function AddScreen() {
   const parsedPreview = parseAmount(amount);
   const yesterday = addDays(todayISO(), -1);
 
+  if (initialLoading) {
+    return (
+      <Screen>
+        <View style={styles.centerContainer}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <ScreenHeader
-        title={type === 'income' ? t.addExpense.titleIncome : t.addExpense.title}
+        rightAction={
+          <Pressable
+            accessibilityLabel="Close"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => router.back()}
+            style={[
+              styles.closeButton,
+              {
+                backgroundColor: colors.surfaceAlt,
+                borderColor: colors.glassBorder,
+              },
+            ]}>
+            <X color={colors.accent} size={20} />
+          </Pressable>
+        }
+        title={language === 'bn' ? 'লেনদেন সম্পাদনা' : 'Edit Transaction'}
       />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+
           {/* Segmented Type Toggle */}
           <View style={[styles.typeRow, { backgroundColor: colors.surfaceAlt }]}>
             <TypeButton
@@ -166,9 +229,9 @@ export default function AddScreen() {
             </Text>
           ) : null}
 
-          {/* Dynamic Categories Section */}
+          {/* Categories Section */}
           <Text style={[styles.label, { color: colors.text }]}>{t.addExpense.category}</Text>
-          {loading ? (
+          {categoriesLoading ? (
             <ActivityIndicator color={colors.primary} style={styles.loader} />
           ) : (
             <View style={styles.categories}>
@@ -221,11 +284,7 @@ export default function AddScreen() {
                   borderColor: date === todayISO() ? colors.primary : colors.border,
                 },
               ]}>
-              <Text
-                style={[
-                  styles.dateChipText,
-                  { color: date === todayISO() ? colors.primary : colors.text },
-                ]}>
+              <Text style={[styles.dateChipText, { color: date === todayISO() ? colors.primary : colors.text }]}>
                 {language === 'bn' ? 'আজ' : 'Today'}
               </Text>
             </Pressable>
@@ -240,11 +299,7 @@ export default function AddScreen() {
                   borderColor: date === yesterday ? colors.primary : colors.border,
                 },
               ]}>
-              <Text
-                style={[
-                  styles.dateChipText,
-                  { color: date === yesterday ? colors.primary : colors.text },
-                ]}>
+              <Text style={[styles.dateChipText, { color: date === yesterday ? colors.primary : colors.text }]}>
                 {language === 'bn' ? 'গতকাল' : 'Yesterday'}
               </Text>
             </Pressable>
@@ -266,13 +321,13 @@ export default function AddScreen() {
             </Pressable>
           </View>
 
-          {/* Validation Error Message */}
+          {/* Error Message */}
           {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
 
           {/* Save Button */}
           <GradientButton
-            title={type === 'income' ? t.addExpense.saveIncome : t.addExpense.saveExpense}
-            onPress={save}
+            title={language === 'bn' ? 'আপডেট করুন' : 'Update Transaction'}
+            onPress={handleSave}
             loading={saving}
             disabled={saving}
             variant="primary"
@@ -298,15 +353,34 @@ function TypeButton({ label, selected, onPress }: { label: string; selected: boo
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   content: {
     padding: Tokens.spacing.lg,
     gap: Tokens.spacing.md,
     paddingBottom: Tokens.spacing.section,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Tokens.spacing.xs,
+  },
   title: {
     fontSize: Tokens.typography.headline.fontSize,
     lineHeight: Tokens.typography.headline.lineHeight,
     fontWeight: '700',
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   typeRow: {
     flexDirection: 'row',

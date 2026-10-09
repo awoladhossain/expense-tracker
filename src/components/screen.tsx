@@ -7,13 +7,15 @@ import { useAppColors } from '@/hooks/useAppColors';
 export function Screen({
   children,
   style,
+  edges = ['top'],
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  edges?: ('top' | 'bottom' | 'left' | 'right')[];
 }) {
   const colors = useAppColors();
   return (
-    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: colors.background }, style]}>
+    <SafeAreaView edges={edges} style={[styles.safe, { backgroundColor: colors.background }, style]}>
       <View style={styles.body}>{children}</View>
     </SafeAreaView>
   );
