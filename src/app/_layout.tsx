@@ -1,17 +1,20 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DarkTheme, DefaultTheme, Tabs, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, router, Tabs, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { File, Paths } from 'expo-file-system';
 import { ChartColumn, Clock, House, Plus, Settings } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Pressable,
   StyleSheet,
   Text,
   useColorScheme,
   View,
+  type AppStateStatus,
   type ColorValue,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,12 +22,18 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import OnboardingScreen, { ONBOARDING_KEY } from '@/app/onboarding';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PinLockModal } from '@/components/pin-lock-modal';
+import Toast, { BaseToast, ErrorToast, type ToastConfig } from 'react-native-toast-message';
 import { getDatabase } from '@/db/database';
 import { useAppColors } from '@/hooks/useAppColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useLockStore } from '@/store/lockStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useUserProfileStore } from '@/store/userProfileStore';
+import {
+  setupNotificationChannelsAsync,
+  scheduleDailyReminderAsync,
+  isRunningInExpoGo,
+} from '@/utils/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,12 +52,33 @@ export default function RootLayout() {
   const hasPinSet = useLockStore((state) => state.hasPinSet);
   const isUnlocked = useLockStore((state) => state.isUnlocked);
   const setUnlocked = useLockStore((state) => state.setUnlocked);
+  const pendingDeepLinkRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
+    async function cleanupStaleExports() {
+      try {
+        const cacheDir = Paths.cache;
+        const entries = cacheDir.list();
+        const exportRegex = /^expense-tracker-.*\.(csv|json)$/;
+        for (const entry of entries) {
+          if (entry instanceof File && exportRegex.test(entry.name)) {
+            try {
+              entry.delete();
+            } catch {
+              // Ignore single file deletion failure
+            }
+          }
+        }
+      } catch {
+        // Silent fail OK per SEC-07 specification
+      }
+    }
+
     async function prepare() {
       try {
+        cleanupStaleExports().catch(() => {});
         const [, , , , onboardingDone] = await Promise.all([
           getDatabase(),
           useSettingsStore.getState().loadSettings(),
@@ -57,13 +87,27 @@ export default function RootLayout() {
           AsyncStorage.getItem(ONBOARDING_KEY),
         ]);
 
+        const settings = useSettingsStore.getState();
+
+        // Initialize notification channel and sync reminder if enabled
+        setupNotificationChannelsAsync().catch(() => {});
+        if (settings.reminderEnabled) {
+          scheduleDailyReminderAsync(
+            settings.reminderHour,
+            settings.reminderMinute,
+            settings.language
+          ).catch(() => {});
+        }
+
         if (!cancelled) {
           setIsOnboardingCompleted(Boolean(onboardingDone));
           setPhase('ready');
           await SplashScreen.hideAsync().catch(() => {});
         }
       } catch (error) {
-        console.warn('Failed to start expense tracker', error);
+        if (__DEV__) {
+          console.warn('Failed to start expense tracker', error);
+        }
         if (!cancelled) {
           setPhase('error');
           await SplashScreen.hideAsync().catch(() => {});
@@ -81,6 +125,77 @@ export default function RootLayout() {
     if (phase === 'booting') return;
     SplashScreen.hideAsync().catch(() => {});
   }, [phase]);
+
+  // Handle pending deep links upon unlocking
+  useEffect(() => {
+    if (isUnlocked && pendingDeepLinkRef.current) {
+      const target = pendingDeepLinkRef.current;
+      pendingDeepLinkRef.current = null;
+      router.navigate(target as '/add' | '/budget' | '/stats' | '/history');
+    }
+  }, [isUnlocked]);
+
+  // Register foreground presentation and response listeners for native notifications
+  useEffect(() => {
+    let responseSub: { remove: () => void } | null = null;
+
+    async function initNotificationListeners() {
+      if (isRunningInExpoGo()) return;
+      try {
+        const Notifications = await import('expo-notifications');
+        if (!Notifications.addNotificationResponseReceivedListener) return;
+
+        // Foreground presentation configuration
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+
+        // Deep-link / navigate on notification tap with lock gate
+        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+          const url = response.notification.request.content.data?.url;
+          if (typeof url === 'string') {
+            const { isUnlocked: currentlyUnlocked } = useLockStore.getState();
+            if (!currentlyUnlocked) {
+              pendingDeepLinkRef.current = url;
+            } else {
+              router.navigate(url as '/add' | '/budget' | '/stats' | '/history');
+            }
+          }
+        });
+      } catch (err) {
+        if (__DEV__) {
+          console.warn('Failed to register notification listeners:', err);
+        }
+      }
+    }
+
+    initNotificationListeners();
+
+    return () => {
+      responseSub?.remove();
+    };
+  }, []);
+
+  // Re-lock when app transitions to background or inactive (OWASP MASVS Lifecycle requirement)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        const { hasPinSet: isPinConfigured } = useLockStore.getState();
+        if (isPinConfigured) {
+          useLockStore.getState().setUnlocked(false);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   if (phase === 'booting' && attempt === 0) return null;
 
@@ -190,11 +305,128 @@ export default function RootLayout() {
                 visible={showLockModal}
               />
             )}
+
+            {/* Global Toast System */}
+            <Toast
+              config={createToastConfig(colors)}
+              position="bottom"
+              bottomOffset={100}
+            />
           </ThemeProvider>
         </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+function createToastConfig(colors: ReturnType<typeof useAppColors>): ToastConfig {
+  return {
+    success: (props) => (
+      <BaseToast
+        {...props}
+        style={{
+          borderLeftColor: colors.success,
+          borderLeftWidth: 5,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderRadius: 14,
+          height: undefined,
+          minHeight: 60,
+          paddingVertical: 10,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+          elevation: 6,
+          width: '90%',
+        }}
+        contentContainerStyle={{ paddingHorizontal: 14 }}
+        text1Style={{
+          fontSize: 15,
+          fontWeight: '700',
+          color: colors.text,
+        }}
+        text2Style={{
+          fontSize: 13,
+          color: colors.textMuted,
+          marginTop: 2,
+        }}
+        text1NumberOfLines={2}
+        text2NumberOfLines={2}
+      />
+    ),
+    error: (props) => (
+      <ErrorToast
+        {...props}
+        style={{
+          borderLeftColor: colors.danger,
+          borderLeftWidth: 5,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderRadius: 14,
+          height: undefined,
+          minHeight: 60,
+          paddingVertical: 10,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+          elevation: 6,
+          width: '90%',
+        }}
+        contentContainerStyle={{ paddingHorizontal: 14 }}
+        text1Style={{
+          fontSize: 15,
+          fontWeight: '700',
+          color: colors.text,
+        }}
+        text2Style={{
+          fontSize: 13,
+          color: colors.textMuted,
+          marginTop: 2,
+        }}
+        text1NumberOfLines={2}
+        text2NumberOfLines={2}
+      />
+    ),
+    info: (props) => (
+      <BaseToast
+        {...props}
+        style={{
+          borderLeftColor: colors.primary,
+          borderLeftWidth: 5,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderRadius: 14,
+          height: undefined,
+          minHeight: 60,
+          paddingVertical: 10,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+          elevation: 6,
+          width: '90%',
+        }}
+        contentContainerStyle={{ paddingHorizontal: 14 }}
+        text1Style={{
+          fontSize: 15,
+          fontWeight: '700',
+          color: colors.text,
+        }}
+        text2Style={{
+          fontSize: 13,
+          color: colors.textMuted,
+          marginTop: 2,
+        }}
+        text1NumberOfLines={2}
+        text2NumberOfLines={2}
+      />
+    ),
+  };
 }
 
 function TabLabel({ color, label }: { color: ColorValue; label: string }) {

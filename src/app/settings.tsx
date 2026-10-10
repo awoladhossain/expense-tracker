@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
+  Bell,
+  Clock,
   Download,
   Fingerprint,
   KeyRound,
@@ -12,6 +14,7 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -33,6 +36,11 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { Tokens } from '@/constants/tokens';
 import { useAppColors } from '@/hooks/useAppColors';
 import { useI18n } from '@/hooks/useI18n';
+import {
+  cancelAllReminders,
+  requestNotificationPermission,
+  scheduleDailyReminder,
+} from '@/lib/notifications';
 import { useLockStore } from '@/store/lockStore';
 import {
   useSettingsStore,
@@ -40,6 +48,7 @@ import {
   type Language,
   type ThemeMode,
 } from '@/store/settingsStore';
+import { toast } from '@/store/toastStore';
 import { useUserProfileStore } from '@/store/userProfileStore';
 import { getCurrencySymbol } from '@/utils/currency';
 import {
@@ -59,6 +68,13 @@ export default function SettingsScreen() {
   const setLanguage = useSettingsStore((state) => state.setLanguage);
   const setCurrency = useSettingsStore((state) => state.setCurrency);
   const setTheme = useSettingsStore((state) => state.setTheme);
+  const reminderEnabled = useSettingsStore(
+    (state) => state.dailyReminderEnabled ?? state.reminderEnabled
+  );
+  const reminderTime = useSettingsStore((state) => state.reminderTime || '20:00');
+  const reminderHour = useSettingsStore((state) => state.reminderHour);
+  const reminderMinute = useSettingsStore((state) => state.reminderMinute);
+  const setDailyReminder = useSettingsStore((state) => state.setDailyReminder);
 
   // User Profile store
   const profileName = useUserProfileStore((state) => state.name);
@@ -77,6 +93,7 @@ export default function SettingsScreen() {
   const [showPinModal, setShowPinModal] = useState(false);
   const [hasBiometricsHardware, setHasBiometricsHardware] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showTimeModal, setShowTimeModal] = useState(false);
   const [editName, setEditName] = useState(profileName);
   const [editEmail, setEditEmail] = useState(profileEmail);
   const [isExporting, setIsExporting] = useState(false);
@@ -106,6 +123,13 @@ export default function SettingsScreen() {
     { id: 'system', label: t.settings.themeSystem },
   ];
 
+  const reminderPresets = [
+    { label: '07:00 PM', time: '19:00', hour: 19, minute: 0 },
+    { label: '08:00 PM', time: '20:00', hour: 20, minute: 0 },
+    { label: '09:00 PM', time: '21:00', hour: 21, minute: 0 },
+    { label: '10:00 PM', time: '22:00', hour: 22, minute: 0 },
+  ];
+
   const handleEditProfileOpen = () => {
     setEditName(profileName);
     setEditEmail(profileEmail);
@@ -118,6 +142,53 @@ export default function SettingsScreen() {
       email: editEmail.trim(),
     });
     setShowProfileModal(false);
+    toast.success(t.toast.profileSaved);
+  };
+
+  const handleReminderToggle = async (enabled: boolean) => {
+    if (enabled) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        toast.error(t.settings.reminderSection.enablePermissionPrompt);
+        Linking.openSettings().catch(() => {});
+        return;
+      }
+
+      const scheduled = await scheduleDailyReminder(reminderHour, reminderMinute, {
+        title: language === 'bn' ? 'দৈনিক খরচের হিসাব রাখুন 💰' : 'Time to log your expenses 💰',
+        body:
+          language === 'bn'
+            ? 'আজকের খরচগুলো কি লিখে রেখেছেন? বাজেট নিয়ন্ত্রণে এখনই এন্ট্রি দিন!'
+            : 'Did you make any purchases today? Log them now to keep your budget on track!',
+      });
+
+      if (scheduled) {
+        setDailyReminder(true);
+        toast.success(t.toast.success.reminderScheduled);
+      } else {
+        toast.error(t.toast.error.failedToSave);
+      }
+    } else {
+      await cancelAllReminders();
+      setDailyReminder(false);
+      toast.info(t.toast.success.reminderCancelled);
+    }
+  };
+
+  const handleSelectReminderTime = async (time: string, hour: number, minute: number) => {
+    setDailyReminder(reminderEnabled, time);
+    setShowTimeModal(false);
+
+    if (reminderEnabled) {
+      await scheduleDailyReminder(hour, minute, {
+        title: language === 'bn' ? 'দৈনিক খরচের হিসাব রাখুন 💰' : 'Time to log your expenses 💰',
+        body:
+          language === 'bn'
+            ? 'আজকের খরচগুলো কি লিখে রেখেছেন? বাজেট নিয়ন্ত্রণে এখনই এন্ট্রি দিন!'
+            : 'Did you make any purchases today? Log them now to keep your budget on track!',
+      });
+      toast.success(t.toast.success.reminderScheduled);
+    }
   };
 
   const handlePinToggle = () => {
@@ -129,6 +200,7 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await removePin();
+            toast.info(t.lock.removePin);
           },
         },
       ]);
@@ -139,7 +211,7 @@ export default function SettingsScreen() {
 
   const handleBiometricToggle = (enabled: boolean) => {
     if (enabled && !hasBiometricsHardware) {
-      Alert.alert(t.common.error, t.lock.biometricsNotAvailable);
+      toast.error(t.lock.biometricsNotAvailable);
       return;
     }
     toggleBiometrics(enabled);
@@ -148,9 +220,12 @@ export default function SettingsScreen() {
   const handleExportCSV = async () => {
     try {
       setIsExporting(true);
-      await exportTransactionsCSV();
+      const exported = await exportTransactionsCSV();
+      if (exported) {
+        toast.success(t.export.exportSuccess);
+      }
     } catch {
-      Alert.alert(t.common.error, t.common.error);
+      toast.error(t.common.error);
     } finally {
       setIsExporting(false);
     }
@@ -159,9 +234,12 @@ export default function SettingsScreen() {
   const handleExportJSON = async () => {
     try {
       setIsExporting(true);
-      await exportTransactionsJSON();
+      const exported = await exportTransactionsJSON();
+      if (exported) {
+        toast.success(t.export.exportSuccess);
+      }
     } catch {
-      Alert.alert(t.common.error, t.common.error);
+      toast.error(t.common.error);
     } finally {
       setIsExporting(false);
     }
@@ -186,9 +264,9 @@ export default function SettingsScreen() {
                 onPress: async () => {
                   try {
                     await resetAllAppData();
-                    Alert.alert(t.common.ok, t.export.resetSuccess);
+                    toast.success(t.export.resetSuccess);
                   } catch {
-                    Alert.alert(t.common.error, t.common.error);
+                    toast.error(t.toast.error.failedToReset);
                   }
                 },
               },
@@ -330,7 +408,53 @@ export default function SettingsScreen() {
           <OptionRow onSelect={setTheme} options={themes} selected={theme} />
         </GlassCard>
 
-        {/* 4. DATA MANAGEMENT SECTION */}
+        {/* 4. REMINDERS SECTION */}
+        <SectionHeader title={t.settings.reminderSection.title} />
+        <GlassCard style={styles.card}>
+          {/* Daily Reminder Toggle */}
+          <View style={styles.settingRow}>
+            <View style={styles.settingLabelGroup}>
+              <Bell color={colors.primary} size={20} />
+              <View>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>
+                  {t.settings.reminderSection.dailyReminder}
+                </Text>
+                <Text style={[styles.subText, { color: colors.textMuted }]}>
+                  {t.settings.reminderSection.subtitle}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              accessibilityLabel={t.settings.reminderSection.dailyReminder}
+              onValueChange={handleReminderToggle}
+              thumbColor={Platform.OS === 'android' ? colors.primary : undefined}
+              trackColor={{ false: colors.border, true: colors.primaryLight }}
+              value={reminderEnabled}
+            />
+          </View>
+
+          {/* Reminder Time Picker Row */}
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setShowTimeModal(true)}
+            style={[styles.actionRow, { paddingVertical: Tokens.spacing.sm }]}>
+            <View style={styles.actionLeft}>
+              <Clock color={colors.primary} size={20} />
+              <View>
+                <Text style={[styles.actionText, { color: colors.text }]}>
+                  {t.settings.reminderSection.reminderTime}
+                </Text>
+                <Text style={[styles.subText, { color: colors.textMuted }]}>
+                  {`${reminderHour % 12 || 12}:${reminderMinute < 10 ? '0' : ''}${reminderMinute} ${reminderHour >= 12 ? 'PM' : 'AM'} (${reminderTime})`}
+                </Text>
+              </View>
+            </View>
+            <Badge label={reminderTime} variant="neutral" />
+          </Pressable>
+        </GlassCard>
+
+        {/* 5. DATA MANAGEMENT SECTION */}
         <SectionHeader title={t.settings.sections.data} />
         <GlassCard style={styles.card}>
           <Pressable
@@ -415,6 +539,67 @@ export default function SettingsScreen() {
                 style={styles.modalSaveBtn}
                 title={t.common.save}
               />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reminder Time Picker Modal */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={showTimeModal}>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t.settings.reminderSection.selectTime}
+            </Text>
+            <Text style={[styles.subText, { color: colors.textMuted, marginBottom: Tokens.spacing.sm }]}>
+              {t.settings.reminderSection.subtitle}
+            </Text>
+
+            <View style={styles.chipsContainer}>
+              {reminderPresets.map((preset) => {
+                const isSelected = reminderTime === preset.time;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={preset.time}
+                    onPress={() =>
+                      handleSelectReminderTime(preset.time, preset.hour, preset.minute)
+                    }
+                    style={[
+                      styles.timeChip,
+                      {
+                        backgroundColor: isSelected ? colors.primary : colors.surfaceAlt,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.timeChipText,
+                        { color: isSelected ? '#FFFFFF' : colors.text },
+                      ]}>
+                      {preset.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowTimeModal(false)}
+                style={[styles.modalCancelBtn, { borderColor: colors.border }]}>
+                <Text style={[styles.modalCancelText, { color: colors.text }]}>
+                  {t.common.close}
+                </Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -556,6 +741,11 @@ const styles = StyleSheet.create({
     fontSize: Tokens.typography.bodyLg.fontSize,
     fontWeight: '600',
   },
+  subText: {
+    fontSize: Tokens.typography.caption.fontSize,
+    lineHeight: Tokens.typography.caption.lineHeight,
+    marginTop: 2,
+  },
   subRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -650,5 +840,25 @@ const styles = StyleSheet.create({
   },
   modalSaveBtn: {
     flex: 1,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Tokens.spacing.sm,
+    marginVertical: Tokens.spacing.sm,
+  },
+  timeChip: {
+    flexGrow: 1,
+    minWidth: '45%',
+    paddingVertical: Tokens.spacing.md,
+    paddingHorizontal: Tokens.spacing.lg,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeChipText: {
+    fontSize: Tokens.typography.body.fontSize,
+    fontWeight: '700',
   },
 });

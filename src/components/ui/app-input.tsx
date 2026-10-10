@@ -28,6 +28,7 @@ export interface AppInputProps {
   placeholder?: string;
   secureTextEntry?: boolean;
   editable?: boolean;
+  maxLength?: number;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -41,6 +42,7 @@ export function AppInput({
   placeholder,
   secureTextEntry = false,
   editable = true,
+  maxLength,
   style,
 }: AppInputProps) {
   const colors = useThemeColor();
@@ -110,6 +112,7 @@ export function AppInput({
             placeholderTextColor={colors.textDisabled}
             keyboardType={resolvedKeyboardType}
             secureTextEntry={secureTextEntry}
+            maxLength={maxLength}
             style={[
               styles.input,
               { color: colors.text },

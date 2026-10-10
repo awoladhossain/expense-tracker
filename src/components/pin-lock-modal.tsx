@@ -43,13 +43,14 @@ export function PinLockModal({
 }: PinLockModalProps) {
   const colors = useThemeColor();
   const { t } = useI18n();
-  const { biometricsEnabled, verifyPin, setPin, setUnlocked } = useLockStore();
+  const { biometricsEnabled, verifyPin, setPin, setUnlocked, getRemainingLockoutSeconds } = useLockStore();
 
   const [pin, setPinInput] = useState('');
   const [firstPin, setFirstPin] = useState<string | null>(null);
   const [step, setStep] = useState<'enter' | 'confirm'>('enter');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasBiometrics, setHasBiometrics] = useState(false);
+  const [lockoutSec, setLockoutSec] = useState(() => getRemainingLockoutSeconds());
 
   const shakeOffset = useSharedValue(0);
 
@@ -68,6 +69,22 @@ export function PinLockModal({
     );
   }, [shakeOffset]);
 
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutSec <= 0) return;
+
+    const interval = setInterval(() => {
+      const rem = getRemainingLockoutSeconds();
+      setLockoutSec(rem);
+      if (rem <= 0) {
+        clearInterval(interval);
+        setErrorMsg(null);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [getRemainingLockoutSeconds, lockoutSec]);
+
   // Check biometric availability
   useEffect(() => {
     async function checkBio() {
@@ -83,7 +100,7 @@ export function PinLockModal({
   }, []);
 
   const handleBiometricAuth = useCallback(async () => {
-    if (!biometricsEnabled || !hasBiometrics) return;
+    if (!biometricsEnabled || !hasBiometrics || lockoutSec > 0) return;
     try {
       const res = await LocalAuthentication.authenticateAsync({
         promptMessage: t.lock.biometricPrompt,
@@ -99,26 +116,30 @@ export function PinLockModal({
     } catch (err) {
       console.warn('Biometric auth error', err);
     }
-  }, [biometricsEnabled, hasBiometrics, onSuccess, setUnlocked, t]);
+  }, [biometricsEnabled, hasBiometrics, lockoutSec, onSuccess, setUnlocked, t]);
 
   // Auto trigger biometrics on unlock mode
   useEffect(() => {
-    if (visible && mode === 'unlock' && biometricsEnabled && hasBiometrics) {
+    if (visible && mode === 'unlock' && biometricsEnabled && hasBiometrics && lockoutSec === 0) {
       handleBiometricAuth();
     }
-  }, [visible, mode, biometricsEnabled, hasBiometrics, handleBiometricAuth]);
+  }, [visible, mode, biometricsEnabled, hasBiometrics, lockoutSec, handleBiometricAuth]);
 
   // Handle Complete PIN
   const handlePinComplete = useCallback(
     async (completedPin: string) => {
       if (mode === 'unlock') {
-        const isValid = await verifyPin(completedPin);
-        if (isValid) {
+        const result = await verifyPin(completedPin);
+        if (result.success) {
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setErrorMsg(null);
           setPinInput('');
           setUnlocked(true);
           onSuccess?.();
+        } else if (result.lockedOut) {
+          triggerShake();
+          setLockoutSec(result.remainingSeconds ?? 30);
+          setPinInput('');
         } else {
           triggerShake();
           setErrorMsg(t.lock.wrongPin);
@@ -154,7 +175,7 @@ export function PinLockModal({
   );
 
   const handleKeyPress = (digit: string) => {
-    if (pin.length >= PIN_LENGTH) return;
+    if (lockoutSec > 0 || pin.length >= PIN_LENGTH) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const nextPin = pin + digit;
     setPinInput(nextPin);
@@ -168,7 +189,7 @@ export function PinLockModal({
   };
 
   const handleDelete = () => {
-    if (pin.length === 0) return;
+    if (lockoutSec > 0 || pin.length === 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setPinInput((prev) => prev.slice(0, -1));
     setErrorMsg(null);
@@ -227,15 +248,19 @@ export function PinLockModal({
             })}
           </Animated.View>
 
-          {/* Error Message */}
-          {errorMsg ? (
+          {/* Error Message or Lockout Countdown */}
+          {lockoutSec > 0 ? (
+            <Text style={[styles.errorText, { color: colors.danger }]}>
+              {`${t.lock.lockoutMsg} ${lockoutSec}s`}
+            </Text>
+          ) : errorMsg ? (
             <Text style={[styles.errorText, { color: colors.danger }]}>{errorMsg}</Text>
           ) : (
             <View style={styles.errorSpacer} />
           )}
 
           {/* Keypad */}
-          <View style={styles.keypad}>
+          <View style={[styles.keypad, lockoutSec > 0 && { opacity: 0.4 }]}>
             {[
               ['1', '2', '3'],
               ['4', '5', '6'],
@@ -244,6 +269,7 @@ export function PinLockModal({
               <View key={rIdx} style={styles.keyRow}>
                 {row.map((digit) => (
                   <KeypadButton
+                    disabled={lockoutSec > 0}
                     key={digit}
                     digit={digit}
                     onPress={() => handleKeyPress(digit)}
@@ -257,21 +283,23 @@ export function PinLockModal({
               {mode === 'unlock' && biometricsEnabled && hasBiometrics ? (
                 <Pressable
                   accessibilityRole="button"
+                  disabled={lockoutSec > 0}
                   onPress={handleBiometricAuth}
                   style={[styles.keyButton, { backgroundColor: colors.surfaceAlt }]}>
-                  <Fingerprint color={colors.primary} size={28} />
+                  <Fingerprint color={lockoutSec > 0 ? colors.textDisabled : colors.primary} size={28} />
                 </Pressable>
               ) : (
                 <View style={styles.keyButtonEmpty} />
               )}
 
-              <KeypadButton digit="0" onPress={() => handleKeyPress('0')} />
+              <KeypadButton disabled={lockoutSec > 0} digit="0" onPress={() => handleKeyPress('0')} />
 
               <Pressable
                 accessibilityRole="button"
+                disabled={lockoutSec > 0}
                 onPress={handleDelete}
                 style={[styles.keyButton, { backgroundColor: colors.surfaceAlt }]}>
-                <Delete color={colors.textMuted} size={26} />
+                <Delete color={lockoutSec > 0 ? colors.textDisabled : colors.textMuted} size={26} />
               </Pressable>
             </View>
           </View>
@@ -283,24 +311,28 @@ export function PinLockModal({
 
 function KeypadButton({
   digit,
+  disabled = false,
   onPress,
 }: {
   digit: string;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const colors = useThemeColor();
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.keyButton,
         {
           backgroundColor: pressed ? colors.border : colors.surface,
           borderColor: colors.border,
+          opacity: disabled ? 0.6 : 1,
         },
       ]}>
-      <Text style={[styles.keyText, { color: colors.text }]}>{digit}</Text>
+      <Text style={[styles.keyText, { color: disabled ? colors.textDisabled : colors.text }]}>{digit}</Text>
     </Pressable>
   );
 }

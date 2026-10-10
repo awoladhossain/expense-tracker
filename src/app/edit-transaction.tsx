@@ -30,6 +30,7 @@ import {
 } from '@/db/transactions';
 import { useI18n } from '@/hooks/useI18n';
 import { useSettingsStore } from '@/store/settingsStore';
+import { toast } from '@/store/toastStore';
 import { formatMoney, getCurrencySymbol, parseAmount } from '@/utils/currency';
 import { addDays, formatDate, todayISO } from '@/utils/date';
 
@@ -121,8 +122,18 @@ export default function EditTransactionScreen() {
       setError(t.addExpense.errors.amountRequired);
       return;
     }
-    if (!parsed) {
+    if (!parsed || parsed <= 0) {
       setError(t.addExpense.errors.amountInvalid);
+      return;
+    }
+    if (parsed > 100000000) {
+      setError(t.validation.amountTooLarge);
+      toast.error(t.validation.amountTooLarge);
+      return;
+    }
+    if (note.trim().length > 255) {
+      setError(t.validation.noteTooLong);
+      toast.error(t.validation.noteTooLong);
       return;
     }
     if (!categoryId) {
@@ -147,10 +158,12 @@ export default function EditTransactionScreen() {
         });
       }
 
+      toast.success(t.toast.transactionUpdated);
       router.back();
     } catch (saveError) {
       console.warn('Failed to update transaction', saveError);
       setError(t.common.error);
+      toast.error(t.common.error);
     } finally {
       setSaving(false);
     }
@@ -265,6 +278,7 @@ export default function EditTransactionScreen() {
           {/* Note Input */}
           <AppInput
             label={t.addExpense.note}
+            maxLength={255}
             value={note}
             onChangeText={setNote}
             placeholder={t.addExpense.notePlaceholder}

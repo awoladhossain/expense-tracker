@@ -79,16 +79,24 @@ export default function HomeScreen() {
   const [expenseLevels, setExpenseLevels] = useState<CategoryLevelSpend[]>([]);
   const [recent, setRecent] = useState<TransactionRow[]>([]);
 
+  const budgetRatio = budgetLimit && budgetLimit > 0 ? monthExpense / budgetLimit : 0;
+  const isBudgetDanger = budgetRatio >= BUDGET_DANGER_THRESHOLD;
+  const isBudgetWarning = budgetRatio >= BUDGET_WARNING_THRESHOLD && !isBudgetDanger;
+
   // Pulse animation for budget danger state
   const pulseAnim = useSharedValue(0);
 
   useEffect(() => {
-    pulseAnim.value = withRepeat(
-      withTiming(1, { duration: 900 }),
-      -1,
-      true
-    );
-  }, [pulseAnim]);
+    if (isBudgetDanger) {
+      pulseAnim.value = withRepeat(
+        withTiming(1, { duration: 900 }),
+        -1,
+        true
+      );
+    } else {
+      pulseAnim.value = 0;
+    }
+  }, [isBudgetDanger, pulseAnim]);
 
   const animatedDangerPulse = useAnimatedStyle(() => {
     return {
@@ -148,7 +156,9 @@ export default function HomeScreen() {
       setRecent(latest);
       setFailed(false);
     } catch (error) {
-      console.warn('Failed to load dashboard data', error);
+      if (__DEV__) {
+        console.warn('Failed to load dashboard data', error);
+      }
       setFailed(true);
     } finally {
       setLoading(false);
@@ -164,10 +174,6 @@ export default function HomeScreen() {
 
   const netBalance = monthIncome - monthExpense;
   const isSurplus = netBalance >= 0;
-
-  const budgetRatio = budgetLimit && budgetLimit > 0 ? monthExpense / budgetLimit : 0;
-  const isBudgetDanger = budgetRatio >= BUDGET_DANGER_THRESHOLD;
-  const isBudgetWarning = budgetRatio >= BUDGET_WARNING_THRESHOLD && !isBudgetDanger;
 
   const budgetColor = isBudgetDanger
     ? colors.danger
@@ -306,15 +312,24 @@ export default function HomeScreen() {
             </View>
 
             {/* Budget Progress Card */}
-            <GlassCard style={styles.budgetCard}>
+            <GlassCard
+              onPress={() => router.push('/budget')}
+              style={styles.budgetCard}>
               <View style={styles.budgetHeader}>
                 <Text numberOfLines={1} style={[styles.sectionTitle, { color: colors.text }]}>
                   {language === 'bn' ? 'মাসিক বাজেট' : 'Monthly Budget'}
                 </Text>
                 {budgetLimit ? (
-                  <Text style={[styles.budgetRatioText, { color: budgetColor }]}>
-                    {budgetPercentLabel}
-                  </Text>
+                  <View style={styles.budgetHeaderRight}>
+                    <Text style={[styles.budgetRatioText, { color: budgetColor }]}>
+                      {budgetPercentLabel}
+                    </Text>
+                    <Badge
+                      label={t.budget.editBudget}
+                      onPress={() => router.push('/budget')}
+                      variant="pill"
+                    />
+                  </View>
                 ) : (
                   <Badge
                     label={t.budget.setBudget}
@@ -577,6 +592,11 @@ const styles = StyleSheet.create({
   budgetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Tokens.spacing.sm,
+  },
+  budgetHeaderRight: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: Tokens.spacing.sm,
   },

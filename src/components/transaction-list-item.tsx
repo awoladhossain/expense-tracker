@@ -18,6 +18,7 @@ import { Tokens } from '@/constants/tokens';
 import { deleteTransaction, type TransactionRow } from '@/db/transactions';
 import { useI18n } from '@/hooks/useI18n';
 import { useSettingsStore } from '@/store/settingsStore';
+import { toast } from '@/store/toastStore';
 import { formatMoney } from '@/utils/currency';
 
 export interface TransactionListItemProps {
@@ -65,7 +66,7 @@ export function TransactionListItem({
               onDelete?.();
             } catch (err) {
               console.warn('Failed to delete transaction', err);
-              Alert.alert(t.common.error);
+              toast.error(t.common.error);
             }
           },
         },

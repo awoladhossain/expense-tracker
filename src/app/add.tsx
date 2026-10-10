@@ -23,12 +23,19 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { GradientButton } from '@/components/ui/gradient-button';
 import { useThemeColor } from '@/constants/colors';
 import { Tokens } from '@/constants/tokens';
+import { getBudgetByMonth } from '@/db/budgets';
 import { getCategoriesByType, type CategoryRow } from '@/db/categories';
-import { insertTransaction, type TransactionType } from '@/db/transactions';
+import {
+  getMonthlyTotal,
+  insertTransaction,
+  type TransactionType,
+} from '@/db/transactions';
 import { useI18n } from '@/hooks/useI18n';
 import { useSettingsStore } from '@/store/settingsStore';
+import { toast } from '@/store/toastStore';
 import { formatMoney, getCurrencySymbol, parseAmount } from '@/utils/currency';
-import { addDays, formatDate, todayISO } from '@/utils/date';
+import { addDays, currentMonth, formatDate, todayISO } from '@/utils/date';
+import { checkBudgetThresholdAlertAsync } from '@/utils/notifications';
 
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
@@ -52,7 +59,9 @@ export default function AddScreen() {
       const rows = await getCategoriesByType(activeType);
       setCategories(rows);
     } catch (loadError) {
-      console.warn('Failed to load categories', loadError);
+      if (__DEV__) {
+        console.warn('Failed to load categories', loadError);
+      }
       setError(t.common.error);
     } finally {
       setLoading(false);
@@ -79,8 +88,18 @@ export default function AddScreen() {
       setError(t.addExpense.errors.amountRequired);
       return;
     }
-    if (!parsed) {
+    if (!parsed || parsed <= 0) {
       setError(t.addExpense.errors.amountInvalid);
+      return;
+    }
+    if (parsed > 100000000) {
+      setError(t.validation.amountTooLarge);
+      toast.error(t.validation.amountTooLarge);
+      return;
+    }
+    if (note.trim().length > 255) {
+      setError(t.validation.noteTooLong);
+      toast.error(t.validation.noteTooLong);
       return;
     }
     if (!categoryId) {
@@ -99,6 +118,23 @@ export default function AddScreen() {
         date,
       });
 
+      // Background check for budget threshold if this was an expense
+      if (type === 'expense') {
+        const month = currentMonth();
+        Promise.all([getMonthlyTotal(month, 'expense'), getBudgetByMonth(month)])
+          .then(([spentTotal, budget]) => {
+            if (budget && budget.total_limit > 0) {
+              checkBudgetThresholdAlertAsync({
+                month,
+                totalSpent: spentTotal,
+                totalBudget: budget.total_limit,
+                language,
+              }).catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+
       if (Platform.OS !== 'web') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -113,10 +149,14 @@ export default function AddScreen() {
       setCategoryId(null);
       setError(null);
 
+      toast.success(t.toast.transactionAdded);
       router.navigate('/');
     } catch (saveError) {
-      console.warn('Failed to save transaction', saveError);
+      if (__DEV__) {
+        console.warn('Failed to save transaction', saveError);
+      }
       setError(t.common.error);
+      toast.error(t.common.error);
     } finally {
       setSaving(false);
     }
@@ -204,6 +244,7 @@ export default function AddScreen() {
           {/* Note Input */}
           <AppInput
             label={t.addExpense.note}
+            maxLength={255}
             value={note}
             onChangeText={setNote}
             placeholder={t.addExpense.notePlaceholder}

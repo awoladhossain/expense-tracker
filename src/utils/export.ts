@@ -81,16 +81,24 @@ export async function exportTransactionsCSV(): Promise<boolean> {
   file.create();
   file.write(csvContent);
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(file.uri, {
-      mimeType: 'text/csv',
-      dialogTitle: 'Export Transactions CSV',
-      UTI: 'public.comma-separated-values-text',
-    });
-    return true;
+  try {
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export Transactions CSV',
+        UTI: 'public.comma-separated-values-text',
+      });
+      return true;
+    }
+    return false;
+  } finally {
+    try {
+      file.delete();
+    } catch {
+      // Ignore cleanup error if already deleted
+    }
   }
-  return false;
 }
 
 export async function exportTransactionsJSON(): Promise<boolean> {
@@ -113,16 +121,24 @@ export async function exportTransactionsJSON(): Promise<boolean> {
   file.create();
   file.write(jsonContent);
 
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(file.uri, {
-      mimeType: 'application/json',
-      dialogTitle: 'Export Transactions JSON',
-      UTI: 'public.json',
-    });
-    return true;
+  try {
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Export Transactions JSON',
+        UTI: 'public.json',
+      });
+      return true;
+    }
+    return false;
+  } finally {
+    try {
+      file.delete();
+    } catch {
+      // Ignore cleanup error if already deleted
+    }
   }
-  return false;
 }
 
 export async function resetAllAppData(): Promise<void> {

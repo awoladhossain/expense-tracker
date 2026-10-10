@@ -23,6 +23,8 @@
     "android": {
       "package": "com.awolad.expensetracker",
       "versionCode": 1,
+      "allowBackup": false,
+      "usesCleartextTraffic": false,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0B0F19",
@@ -60,6 +62,14 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Used to unlock your private expense data"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#208AEF"
         }
       ]
     ],

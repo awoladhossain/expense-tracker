@@ -6,6 +6,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,7 @@ import {
 } from '@/db/transactions';
 import { useAppColors } from '@/hooks/useAppColors';
 import { useI18n } from '@/hooks/useI18n';
+import { toast } from '@/store/toastStore';
 import {
   currentMonth,
   currentWeekRange,
@@ -139,10 +141,13 @@ export default function HistoryScreen() {
         style: 'destructive',
         onPress: () => {
           deleteTransaction(transaction.id)
-            .then(load)
+            .then(() => {
+              toast.success(t.toast.transactionDeleted);
+              load();
+            })
             .catch((error) => {
               console.warn('Failed to delete transaction', error);
-              Alert.alert(t.common.error);
+              toast.error(t.common.error);
             });
         },
       },
@@ -276,6 +281,10 @@ export default function HistoryScreen() {
           contentContainerStyle={styles.list}
           data={failed ? [] : items}
           keyExtractor={(item) => item.id}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={10}
+          removeClippedSubviews={Platform.OS !== 'web'}
           ListEmptyComponent={
             <EmptyState
               description={t.history.noResultsDesc}

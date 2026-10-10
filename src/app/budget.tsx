@@ -3,6 +3,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -31,6 +32,7 @@ import {
 import { getMonthlyTotal } from '@/db/transactions';
 import { useI18n } from '@/hooks/useI18n';
 import { useSettingsStore } from '@/store/settingsStore';
+import { toast } from '@/store/toastStore';
 import { formatMoney, getCurrencySymbol, parseAmount } from '@/utils/currency';
 import { currentMonth, formatMonth } from '@/utils/date';
 
@@ -107,30 +109,50 @@ export default function BudgetScreen() {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       }
 
+      toast.success(t.toast.budgetSaved);
       closeBudget();
     } catch (saveError) {
       console.warn('Failed to save budget settings', saveError);
       setError(t.common.error);
+      toast.error(t.common.error);
     } finally {
       setSaving(false);
     }
   }
 
   async function handleClearTotalBudget() {
-    setSaving(true);
-    try {
-      await deleteBudget(currentMonth());
-      setTotalAmount('');
-      setHasBudget(false);
-      if (Platform.OS !== 'web') {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-    } catch (clearError) {
-      console.warn('Failed to clear budget', clearError);
-      setError(t.common.error);
-    } finally {
-      setSaving(false);
-    }
+    Alert.alert(
+      t.common.delete,
+      language === 'bn'
+        ? 'আপনি কি এই মাসের বাজেট মুছে ফেলতে চান?'
+        : 'Are you sure you want to delete this month\'s budget?',
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: t.common.delete,
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await deleteBudget(currentMonth());
+              setTotalAmount('');
+              setHasBudget(false);
+              toast.info(t.toast.budgetCleared);
+              if (Platform.OS !== 'web') {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }
+              closeBudget();
+            } catch (clearError) {
+              console.warn('Failed to clear budget', clearError);
+              setError(t.common.error);
+              toast.error(t.common.error);
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   const parsedTotal = parseAmount(totalAmount);
