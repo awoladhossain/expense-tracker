@@ -1,23 +1,26 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react-native';
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { DevSettings, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GradientButton } from '@/components/ui/gradient-button';
 import { Colors } from '@/constants/colors';
 import { Tokens } from '@/constants/tokens';
+import { getTranslations } from '@/i18n';
+import { useSettingsStore } from '@/store/settingsStore';
 
-interface Props {
+export interface ErrorBoundaryProps {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
       hasError: false,
@@ -25,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
     };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return {
       hasError: true,
       error,
@@ -33,13 +36,16 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    if (__DEV__) {
-      console.error('ErrorBoundary caught error:', error, errorInfo);
-    }
-    // Note: Future production crash reporting (e.g. Sentry/Crashlytics) can hook here
+    console.error('ErrorBoundary caught an unhandled error:', error, errorInfo.componentStack);
   }
 
   handleRestart = (): void => {
+    if (__DEV__ && DevSettings?.reload) {
+      DevSettings.reload();
+      return;
+    }
+
+    // Reset error state for component re-mount
     this.setState({
       hasError: false,
       error: null,
@@ -48,7 +54,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      const palette = Colors.light;
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      const settings = useSettingsStore.getState();
+      const scheme = settings.theme === 'dark' ? 'dark' : 'light';
+      const palette = Colors[scheme];
+      const t = getTranslations(settings.language);
 
       return (
         <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
@@ -61,14 +74,13 @@ export class ErrorBoundary extends Component<Props, State> {
                   borderColor: `${palette.danger}30`,
                 },
               ]}>
-              <AlertTriangle color={palette.danger} size={48} strokeWidth={1.8} />
+              <AlertTriangle color={palette.danger} size={56} strokeWidth={1.8} />
             </View>
 
-            <Text style={[styles.title, { color: palette.text }]}>Something went wrong</Text>
+            <Text style={[styles.title, { color: palette.text }]}>{t.common.error}</Text>
 
-            <Text style={[styles.description, { color: palette.textMuted }]}>
-              {this.state.error?.message ||
-                'An unexpected error occurred. Please restart the application to continue.'}
+            <Text style={[styles.subtitle, { color: palette.textMuted }]}>
+              Please restart the app
             </Text>
 
             <GradientButton
@@ -100,8 +112,8 @@ const styles = StyleSheet.create({
     gap: Tokens.spacing.md,
   },
   iconContainer: {
-    width: 88,
-    height: 88,
+    width: 96,
+    height: 96,
     borderRadius: Tokens.radius.card,
     borderWidth: 1,
     alignItems: 'center',
@@ -114,7 +126,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  description: {
+  subtitle: {
     fontSize: Tokens.typography.body.fontSize,
     lineHeight: Tokens.typography.body.lineHeight,
     fontWeight: '500',
