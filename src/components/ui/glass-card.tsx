@@ -56,7 +56,7 @@ export function GlassCard({
 
   const dynamicCardStyle: ViewStyle = {
     backgroundColor: colors.surface,
-    borderColor: colors.glassBorder,
+    borderColor: colors.border,
   };
 
   if (onPress) {
@@ -87,20 +87,15 @@ const styles = StyleSheet.create({
     padding: Tokens.spacing.lg,
     ...Platform.select({
       ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
       },
       android: {
-        elevation: 3,
+        elevation: 1,
       },
-      default: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
+      default: {},
     }),
   },
 });

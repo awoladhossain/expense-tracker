@@ -4,9 +4,11 @@
  * UTF-8 BOM (\uFEFF) included for Excel Bengali compatibility
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import { ONBOARDING_KEY } from '@/app/onboarding';
 import { getDatabase } from '@/db/database';
 import { type TransactionRow } from '@/db/transactions';
 
@@ -134,4 +136,5 @@ export async function resetAllAppData(): Promise<void> {
     // Reset any soft-deleted defaults
     await db.execAsync(`UPDATE categories SET is_deleted = 0 WHERE is_default = 1;`);
   });
+  await AsyncStorage.removeItem(ONBOARDING_KEY).catch(() => {});
 }

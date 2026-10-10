@@ -1,5 +1,6 @@
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DarkTheme, DefaultTheme, router, Tabs, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Tabs, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ChartColumn, Clock, House, Plus, Settings } from 'lucide-react-native';
@@ -13,11 +14,11 @@ import {
   View,
   type ColorValue,
 } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { ONBOARDING_KEY } from '@/app/onboarding';
+import OnboardingScreen, { ONBOARDING_KEY } from '@/app/onboarding';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PinLockModal } from '@/components/pin-lock-modal';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDatabase } from '@/db/database';
 import { useAppColors } from '@/hooks/useAppColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -37,6 +38,7 @@ export default function RootLayout() {
   const scheme = theme === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : theme;
   const [phase, setPhase] = useState<BootPhase>('booting');
   const [attempt, setAttempt] = useState(0);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
 
   const hasPinSet = useLockStore((state) => state.hasPinSet);
   const isUnlocked = useLockStore((state) => state.isUnlocked);
@@ -56,11 +58,9 @@ export default function RootLayout() {
         ]);
 
         if (!cancelled) {
+          setIsOnboardingCompleted(Boolean(onboardingDone));
           setPhase('ready');
           await SplashScreen.hideAsync().catch(() => {});
-          if (!onboardingDone) {
-            router.replace('/onboarding');
-          }
         }
       } catch (error) {
         console.warn('Failed to start expense tracker', error);
@@ -109,78 +109,91 @@ export default function RootLayout() {
 
   const showLockModal = hasPinSet && !isUnlocked;
 
-  return (
-    <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
-      <ErrorBoundary>
-        <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+  if (!isOnboardingCompleted) {
+    return (
+      <GestureHandlerRootView style={styles.flex}>
+        <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <Tabs
-            screenOptions={{
-              headerShown: false,
-              tabBarActiveTintColor: colors.tabActive,
-              tabBarInactiveTintColor: colors.tabInactive,
-              tabBarStyle: {
-                backgroundColor: colors.tabBackground,
-                borderTopColor: colors.border,
-              },
-              sceneStyle: { backgroundColor: colors.background },
-            }}>
-            <Tabs.Screen
-              name="index"
-              options={{
-                title: t.tabs.home,
-                tabBarIcon: ({ color, size }) => <House color={color} size={size} />,
-                tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.home} />,
-              }}
-            />
-            <Tabs.Screen
-              name="stats"
-              options={{
-                title: t.tabs.stats,
-                tabBarIcon: ({ color, size }) => <ChartColumn color={color} size={size} />,
-                tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.stats} />,
-              }}
-            />
-            <Tabs.Screen
-              name="add"
-              options={{
-                title: t.tabs.add,
-                tabBarIcon: ({ color, size }) => <Plus color={color} size={size} />,
-                tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.add} />,
-              }}
-            />
-            <Tabs.Screen
-              name="history"
-              options={{
-                title: t.tabs.history,
-                tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
-                tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.history} />,
-              }}
-            />
-            <Tabs.Screen
-              name="settings"
-              options={{
-                title: t.tabs.settings,
-                tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
-                tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.settings} />,
-              }}
-            />
-            <Tabs.Screen name="budget" options={{ href: null }} />
-            <Tabs.Screen name="edit-transaction" options={{ href: null }} />
-            <Tabs.Screen name="onboarding" options={{ href: null }} />
-          </Tabs>
+          <OnboardingScreen onComplete={() => setIsOnboardingCompleted(true)} />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
 
-          {/* Security Gate PIN Modal */}
-          {showLockModal && (
-            <PinLockModal
-              mode="unlock"
-              onSuccess={() => setUnlocked(true)}
-              visible={showLockModal}
-            />
-          )}
-        </ThemeProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+  return (
+    <GestureHandlerRootView style={styles.flex}>
+      <SafeAreaProvider style={{ flex: 1, backgroundColor: colors.background }}>
+        <ErrorBoundary>
+          <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            <Tabs
+              screenOptions={{
+                headerShown: false,
+                tabBarActiveTintColor: colors.tabActive,
+                tabBarInactiveTintColor: colors.tabInactive,
+                tabBarStyle: {
+                  backgroundColor: colors.tabBackground,
+                  borderTopColor: colors.border,
+                },
+                sceneStyle: { backgroundColor: colors.background },
+              }}>
+              <Tabs.Screen
+                name="index"
+                options={{
+                  title: t.tabs.home,
+                  tabBarIcon: ({ color, size }) => <House color={color} size={size} />,
+                  tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.home} />,
+                }}
+              />
+              <Tabs.Screen
+                name="stats"
+                options={{
+                  title: t.tabs.stats,
+                  tabBarIcon: ({ color, size }) => <ChartColumn color={color} size={size} />,
+                  tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.stats} />,
+                }}
+              />
+              <Tabs.Screen
+                name="add"
+                options={{
+                  title: t.tabs.add,
+                  tabBarIcon: ({ color, size }) => <Plus color={color} size={size} />,
+                  tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.add} />,
+                }}
+              />
+              <Tabs.Screen
+                name="history"
+                options={{
+                  title: t.tabs.history,
+                  tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+                  tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.history} />,
+                }}
+              />
+              <Tabs.Screen
+                name="settings"
+                options={{
+                  title: t.tabs.settings,
+                  tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
+                  tabBarLabel: ({ color }) => <TabLabel color={color} label={t.tabs.settings} />,
+                }}
+              />
+              <Tabs.Screen name="budget" options={{ href: null }} />
+              <Tabs.Screen name="edit-transaction" options={{ href: null }} />
+              <Tabs.Screen name="onboarding" options={{ href: null }} />
+            </Tabs>
+
+            {/* Security Gate PIN Modal */}
+            {showLockModal && (
+              <PinLockModal
+                mode="unlock"
+                onSuccess={() => setUnlocked(true)}
+                visible={showLockModal}
+              />
+            )}
+          </ThemeProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -193,6 +206,7 @@ function TabLabel({ color, label }: { color: ColorValue; label: string }) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   boot: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   bootTitle: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
   retry: { minHeight: 44, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

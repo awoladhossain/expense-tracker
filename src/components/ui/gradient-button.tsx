@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -15,7 +16,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useThemeColor } from '@/constants/colors';
 import { Tokens } from '@/constants/tokens';
@@ -128,63 +128,50 @@ export function GradientButton({
         animatedStyle,
         style,
       ]}>
-      {variant === 'primary' ? (
-        <Svg
-          pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-          width="100%"
-          height="100%">
-          <Defs>
-            <LinearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <Stop offset="0%" stopColor={colors.primary} />
-              <Stop offset="100%" stopColor={colors.accent} />
-            </LinearGradient>
-          </Defs>
-          <Rect
-            width="100%"
-            height="100%"
-            rx={Tokens.radius.full}
-            ry={Tokens.radius.full}
-            fill="url(#btnGrad)"
-          />
-        </Svg>
-      ) : null}
-
-      {loading ? (
-        <ActivityIndicator color={textColor} size="small" />
-      ) : (
-        <>
-          {Icon ? (
-            <Icon color={textColor} size={20} strokeWidth={2.2} />
-          ) : null}
-          <Text
-            ellipsizeMode="tail"
-            numberOfLines={1}
-            style={[styles.title, { color: textColor }]}>
-            {title}
-          </Text>
-        </>
-      )}
+      <View style={styles.content}>
+        {loading ? (
+          <ActivityIndicator color={textColor} size="small" />
+        ) : (
+          <>
+            {Icon ? <Icon color={textColor} size={20} strokeWidth={2.2} /> : null}
+            <Text ellipsizeMode="tail" numberOfLines={1} style={[styles.title, { color: textColor }]}>
+              {title}
+            </Text>
+          </>
+        )}
+      </View>
     </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
+    width: '100%',
+    alignSelf: 'stretch',
     minHeight: 52,
     borderRadius: Tokens.radius.full,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  content: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Tokens.spacing.xxl,
     gap: Tokens.spacing.sm,
-    overflow: 'hidden',
   },
   title: {
     fontSize: Tokens.typography.bodyLg.fontSize,
     lineHeight: Tokens.typography.bodyLg.lineHeight,
     fontWeight: '700',
     flexShrink: 1,
+    textAlign: 'center',
   },
   disabled: {
     opacity: 0.5,

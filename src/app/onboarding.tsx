@@ -3,10 +3,14 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import {
   ArrowRight,
-  BarChart3,
+  ArrowUpRight,
   Check,
+  Coffee,
   Globe,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
 } from 'lucide-react-native';
 import React, { useRef, useState } from 'react';
 import {
@@ -15,15 +19,13 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GlassCard } from '@/components/ui/glass-card';
 import { GradientButton } from '@/components/ui/gradient-button';
 import { useThemeColor } from '@/constants/colors';
 import { Tokens } from '@/constants/tokens';
@@ -37,8 +39,9 @@ import { getCurrencySymbol } from '@/utils/currency';
 
 export const ONBOARDING_KEY = '@has_completed_onboarding';
 
-export default function OnboardingScreen() {
+export default function OnboardingScreen({ onComplete }: { onComplete?: () => void }) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const colors = useThemeColor();
   const { language, t } = useI18n();
 
@@ -56,7 +59,8 @@ export default function OnboardingScreen() {
     try {
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
     } catch {}
-    router.replace('/');
+    if (onComplete) onComplete();
+    else router.replace('/');
   };
 
   const handleNext = async () => {
@@ -85,42 +89,43 @@ export default function OnboardingScreen() {
     }
   };
 
-  const languages: { id: Language; label: string }[] = [
-    { id: 'en', label: 'English' },
-    { id: 'bn', label: 'বাংলা' },
+  const languages: { id: Language; label: string; sub: string }[] = [
+    { id: 'en', label: 'English', sub: 'Default' },
+    { id: 'bn', label: 'বাংলা', sub: 'Bengali' },
   ];
-  const currencies: CurrencyCode[] = ['BDT', 'USD', 'EUR', 'INR'];
+  const currencies: { code: CurrencyCode; name: string }[] = [
+    { code: 'BDT', name: 'Taka' },
+    { code: 'USD', name: 'Dollar' },
+    { code: 'EUR', name: 'Euro' },
+    { code: 'INR', name: 'Rupee' },
+  ];
+
+  // Defensive safe area clearance: ensure generous room above and below
+  const topPadding = Math.max(insets.top, 24) + 8;
+  const bottomPadding = Math.max(insets.bottom, 16) + 12;
 
   return (
-    <View style={styles.container}>
-      {/* Full-bleed Gradient Background */}
-      <Svg height="100%" pointerEvents="none" style={StyleSheet.absoluteFill} width="100%">
-        <Defs>
-          <LinearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={colors.primary} />
-            <Stop offset="100%" stopColor={colors.accent} />
-          </LinearGradient>
-        </Defs>
-        <Rect fill="url(#bgGrad)" height="100%" width="100%" />
-      </Svg>
-
-      <SafeAreaView style={styles.safeArea}>
-        {/* Top Header: Brand + Skip */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.mainWrapper, { paddingTop: topPadding, paddingBottom: bottomPadding }]}>
+        {/* Top App Bar: Brand pill + Skip button */}
         <View style={styles.topBar}>
-          <View style={styles.brandBadge}>
-            <Sparkles color="#FFFFFF" size={18} />
-            <Text style={styles.brandTitle}>{t.common.appName}</Text>
+          <View style={[styles.brandBadge, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.brandIconDot, { backgroundColor: colors.primary }]}>
+              <Sparkles color="#FFFFFF" size={12} strokeWidth={2.5} />
+            </View>
+            <Text style={[styles.brandTitle, { color: colors.text }]}>{t.common.appName}</Text>
           </View>
+
           <Pressable
             accessibilityRole="button"
-            hitSlop={12}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={completeOnboarding}
-            style={styles.skipBtn}>
-            <Text style={styles.skipText}>{t.onboarding.skip}</Text>
+            style={[styles.skipBtn, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+            <Text style={[styles.skipText, { color: colors.textMuted }]}>{t.onboarding.skip}</Text>
           </Pressable>
         </View>
 
-        {/* 3 Slides */}
+        {/* Carousel Slides */}
         <FlatList
           data={[0, 1, 2]}
           horizontal
@@ -132,179 +137,343 @@ export default function OnboardingScreen() {
           style={styles.slideList}
           renderItem={({ item }) => {
             if (item === 0) {
-              // Slide 1: Track Every Taka
+              // -------------------------------------------------------------
+              // SLIDE 1: Track Every Taka / Financial Clarity
+              // -------------------------------------------------------------
               return (
                 <View style={[styles.slide, { width }]}>
-                  <View style={styles.iconCircle}>
-                    <BarChart3 color="#FFFFFF" size={80} strokeWidth={1.8} />
+                  <View style={styles.slideHeaderBlock}>
+                    <View style={[styles.categoryPill, { backgroundColor: `${colors.primary}12` }]}>
+                      <Text style={[styles.categoryPillText, { color: colors.primary }]}>
+                        {language === 'bn' ? 'আর্থিক হিসাব' : 'Financial Clarity'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.slideHeadline, { color: colors.text }]}>
+                      {t.onboarding.slide1Title}
+                    </Text>
+                    <Text style={[styles.slideDesc, { color: colors.textMuted }]}>
+                      {t.onboarding.slide1Desc}
+                    </Text>
                   </View>
 
-                  <Text style={styles.slideHeadline}>{t.onboarding.slide1Title}</Text>
-                  <Text style={styles.slideDesc}>{t.onboarding.slide1Desc}</Text>
+                  {/* Production-Quality Mini UI Mockup */}
+                  <View style={[styles.previewFrame, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {/* Mini Hero Card */}
+                    <View style={[styles.miniHeroCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                      <View style={styles.miniHeroTop}>
+                        <Text style={[styles.miniHeroLabel, { color: colors.textMuted }]}>
+                          {language === 'bn' ? 'নেট ব্যালেন্স' : 'Total Balance'}
+                        </Text>
+                        <View style={[styles.miniSurplusBadge, { backgroundColor: `${colors.success}18` }]}>
+                          <ArrowUpRight color={colors.success} size={11} strokeWidth={2.5} />
+                          <Text style={[styles.miniSurplusText, { color: colors.success }]}>
+                            {language === 'bn' ? 'উদ্বৃত্ত' : 'Surplus'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.miniHeroBalance, { color: colors.text }]}>
+                        {getCurrencySymbol(selectedCurrency)} 34,500
+                      </Text>
+                    </View>
 
-                  {/* FinTech Feature Preview Card */}
-                  <GlassCard style={styles.glassFeatureCard}>
-                    <View style={styles.featureItem}>
-                      <View style={styles.featureIcon}>
-                        <Check color="#FFFFFF" size={16} strokeWidth={3} />
+                    {/* Mini Cashflow Row */}
+                    <View style={styles.miniCashflowRow}>
+                      <View style={[styles.miniCashflowBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                        <View style={[styles.miniCashflowIconWrap, { backgroundColor: `${colors.success}15` }]}>
+                          <TrendingUp color={colors.success} size={12} strokeWidth={2.5} />
+                        </View>
+                        <View>
+                          <Text style={[styles.miniCashflowLabel, { color: colors.textMuted }]}>
+                            {language === 'bn' ? 'আয়' : 'Income'}
+                          </Text>
+                          <Text style={[styles.miniCashflowAmount, { color: colors.success }]}>
+                            {getCurrencySymbol(selectedCurrency)} 50,000
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.featureItemText}>
-                        {language === 'bn'
-                          ? 'স্বয়ংক্রিয় আয়-ব্যয় পৃথকীকরণ'
-                          : 'Automatic expense & income separation'}
-                      </Text>
-                    </View>
-                    <View style={styles.featureItem}>
-                      <View style={styles.featureIcon}>
-                        <Check color="#FFFFFF" size={16} strokeWidth={3} />
+
+                      <View style={[styles.miniCashflowBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                        <View style={[styles.miniCashflowIconWrap, { backgroundColor: `${colors.danger}15` }]}>
+                          <TrendingDown color={colors.danger} size={12} strokeWidth={2.5} />
+                        </View>
+                        <View>
+                          <Text style={[styles.miniCashflowLabel, { color: colors.textMuted }]}>
+                            {language === 'bn' ? 'খরচ' : 'Expense'}
+                          </Text>
+                          <Text style={[styles.miniCashflowAmount, { color: colors.text }]}>
+                            {getCurrencySymbol(selectedCurrency)} 15,500
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.featureItemText}>
-                        {language === 'bn'
-                          ? 'রিয়েলটাইম নিট ব্যালেন্স ও ক্যাশফ্লো'
-                          : 'Real-time net balance & cashflow analytics'}
-                      </Text>
                     </View>
-                    <View style={styles.featureItem}>
-                      <View style={styles.featureIcon}>
-                        <Check color="#FFFFFF" size={16} strokeWidth={3} />
+
+                    {/* Mini Transaction Items */}
+                    <View style={styles.miniTxList}>
+                      <View style={styles.miniTxItem}>
+                        <View style={[styles.miniTxIcon, { backgroundColor: '#F9731618' }]}>
+                          <Coffee color="#F97316" size={14} strokeWidth={2.2} />
+                        </View>
+                        <View style={styles.miniTxDetails}>
+                          <Text style={[styles.miniTxTitle, { color: colors.text }]}>
+                            {language === 'bn' ? 'রেস্তোরাঁ ও নাশতা' : 'Restaurant & Coffee'}
+                          </Text>
+                          <Text style={[styles.miniTxMeta, { color: colors.textMuted }]}>
+                            {language === 'bn' ? 'আজ, ১২:৩০ মিনিট' : 'Today, 12:30 PM'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.miniTxAmount, { color: colors.text }]}>
+                          -{getCurrencySymbol(selectedCurrency)} 450
+                        </Text>
                       </View>
-                      <Text style={styles.featureItemText}>
-                        {language === 'bn'
-                          ? '১০০% অফলাইন ও সম্পূর্ণ নিরাপদ ডেটা'
-                          : '100% offline & secured on device'}
-                      </Text>
+
+                      <View style={[styles.miniTxItem, { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                        <View style={[styles.miniTxIcon, { backgroundColor: `${colors.primary}18` }]}>
+                          <Wallet color={colors.primary} size={14} strokeWidth={2.2} />
+                        </View>
+                        <View style={styles.miniTxDetails}>
+                          <Text style={[styles.miniTxTitle, { color: colors.text }]}>
+                            {language === 'bn' ? 'মাসিক বেতন' : 'Salary Deposit'}
+                          </Text>
+                          <Text style={[styles.miniTxMeta, { color: colors.textMuted }]}>
+                            {language === 'bn' ? '১ অক্টোবর' : 'Oct 1'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.miniTxAmount, { color: colors.success }]}>
+                          +{getCurrencySymbol(selectedCurrency)} 50,000
+                        </Text>
+                      </View>
                     </View>
-                  </GlassCard>
+                  </View>
                 </View>
               );
             }
 
             if (item === 1) {
-              // Slide 2: Know Your Levels
+              // -------------------------------------------------------------
+              // SLIDE 2: Know Your Levels / Spending Tiers
+              // -------------------------------------------------------------
               return (
                 <View style={[styles.slide, { width }]}>
-                  <View style={styles.levelIconsHero}>
-                    <Text style={styles.heroEmojiLarge}>🟢 🟡 🔴</Text>
+                  <View style={styles.slideHeaderBlock}>
+                    <View style={[styles.categoryPill, { backgroundColor: `${colors.accent}14` }]}>
+                      <Text style={[styles.categoryPillText, { color: colors.accent }]}>
+                        {language === 'bn' ? 'স্মার্ট বাজেট' : 'Budget Protection'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.slideHeadline, { color: colors.text }]}>
+                      {t.onboarding.slide2Title}
+                    </Text>
+                    <Text style={[styles.slideDesc, { color: colors.textMuted }]}>
+                      {t.onboarding.slide2Desc}
+                    </Text>
                   </View>
 
-                  <Text style={styles.slideHeadline}>{t.onboarding.slide2Title}</Text>
-                  <Text style={styles.slideDesc}>{t.onboarding.slide2Desc}</Text>
-
-                  {/* Level Demo GlassCard */}
-                  <GlassCard style={styles.glassFeatureCard}>
-                    <View style={styles.levelRow}>
-                      <Text style={styles.levelBullet}>🟢</Text>
-                      <View style={styles.levelTextContainer}>
-                        <Text style={styles.levelName}>{t.onboarding.levelLow}</Text>
-                        <Text style={styles.levelSub}>{t.onboarding.levelLowDesc}</Text>
+                  {/* Level Indicators Card */}
+                  <View style={[styles.previewFrame, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    {/* Level 1: Low */}
+                    <View style={styles.levelCardItem}>
+                      <View style={styles.levelItemHeader}>
+                        <View style={styles.levelBadgeGroup}>
+                          <View style={[styles.levelIndicatorDot, { backgroundColor: colors.success }]} />
+                          <Text style={[styles.levelItemTitle, { color: colors.text }]}>
+                            {t.onboarding.levelLow}
+                          </Text>
+                        </View>
+                        <Text style={[styles.levelPercentText, { color: colors.success }]}>32%</Text>
                       </View>
+                      <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
+                        <View style={[styles.progressFill, { width: '32%', backgroundColor: colors.success }]} />
+                      </View>
+                      <Text style={[styles.levelItemSub, { color: colors.textMuted }]}>
+                        {t.onboarding.levelLowDesc}
+                      </Text>
                     </View>
 
-                    <View style={styles.levelRow}>
-                      <Text style={styles.levelBullet}>🟡</Text>
-                      <View style={styles.levelTextContainer}>
-                        <Text style={styles.levelName}>{t.onboarding.levelMod}</Text>
-                        <Text style={styles.levelSub}>{t.onboarding.levelModDesc}</Text>
+                    <View style={[styles.levelDivider, { backgroundColor: colors.border }]} />
+
+                    {/* Level 2: Moderate */}
+                    <View style={styles.levelCardItem}>
+                      <View style={styles.levelItemHeader}>
+                        <View style={styles.levelBadgeGroup}>
+                          <View style={[styles.levelIndicatorDot, { backgroundColor: colors.warning }]} />
+                          <Text style={[styles.levelItemTitle, { color: colors.text }]}>
+                            {t.onboarding.levelMod}
+                          </Text>
+                        </View>
+                        <Text style={[styles.levelPercentText, { color: colors.warning }]}>68%</Text>
                       </View>
+                      <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
+                        <View style={[styles.progressFill, { width: '68%', backgroundColor: colors.warning }]} />
+                      </View>
+                      <Text style={[styles.levelItemSub, { color: colors.textMuted }]}>
+                        {t.onboarding.levelModDesc}
+                      </Text>
                     </View>
 
-                    <View style={styles.levelRow}>
-                      <Text style={styles.levelBullet}>🔴</Text>
-                      <View style={styles.levelTextContainer}>
-                        <Text style={styles.levelName}>{t.onboarding.levelHigh}</Text>
-                        <Text style={styles.levelSub}>{t.onboarding.levelHighDesc}</Text>
+                    <View style={[styles.levelDivider, { backgroundColor: colors.border }]} />
+
+                    {/* Level 3: High */}
+                    <View style={styles.levelCardItem}>
+                      <View style={styles.levelItemHeader}>
+                        <View style={styles.levelBadgeGroup}>
+                          <View style={[styles.levelIndicatorDot, { backgroundColor: colors.danger }]} />
+                          <Text style={[styles.levelItemTitle, { color: colors.text }]}>
+                            {t.onboarding.levelHigh}
+                          </Text>
+                        </View>
+                        <Text style={[styles.levelPercentText, { color: colors.danger }]}>88%</Text>
                       </View>
+                      <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
+                        <View style={[styles.progressFill, { width: '88%', backgroundColor: colors.danger }]} />
+                      </View>
+                      <Text style={[styles.levelItemSub, { color: colors.textMuted }]}>
+                        {t.onboarding.levelHighDesc}
+                      </Text>
                     </View>
-                  </GlassCard>
+                  </View>
                 </View>
               );
             }
 
-            // Slide 3: Language + Currency Selection
+            // -------------------------------------------------------------
+            // SLIDE 3: Language & Currency Preferences
+            // -------------------------------------------------------------
             return (
               <View style={[styles.slide, { width }]}>
-                <View style={styles.iconCircle}>
-                  <Globe color="#FFFFFF" size={80} strokeWidth={1.8} />
+                <View style={styles.slideHeaderBlock}>
+                  <View style={[styles.categoryPill, { backgroundColor: `${colors.primary}12` }]}>
+                    <Text style={[styles.categoryPillText, { color: colors.primary }]}>
+                      {language === 'bn' ? 'ব্যক্তিগতকরণ' : 'Personalization'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.slideHeadline, { color: colors.text }]}>
+                    {t.onboarding.slide3Title}
+                  </Text>
+                  <Text style={[styles.slideDesc, { color: colors.textMuted }]}>
+                    {t.onboarding.slide3Desc}
+                  </Text>
                 </View>
 
-                <Text style={styles.slideHeadline}>{t.onboarding.slide3Title}</Text>
-                <Text style={styles.slideDesc}>{t.onboarding.slide3Desc}</Text>
+                {/* Preference Selectors Card */}
+                <View style={[styles.previewFrame, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  {/* Language Selector */}
+                  <View style={styles.preferenceSection}>
+                    <View style={styles.preferenceHeader}>
+                      <Globe color={colors.primary} size={16} strokeWidth={2.2} />
+                      <Text style={[styles.preferenceLabel, { color: colors.text }]}>
+                        {t.onboarding.languageLabel}
+                      </Text>
+                    </View>
 
-                <GlassCard style={styles.glassFeatureCard}>
-                  {/* Language Segmented Control */}
-                  <Text style={styles.selectorLabel}>{t.onboarding.languageLabel}</Text>
-                  <View style={styles.segmentContainer}>
-                    {languages.map((l) => {
-                      const isSelected = language === l.id;
-                      return (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={l.id}
-                          onPress={async () => {
-                            if (Platform.OS !== 'web') {
-                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-                                () => {},
-                              );
-                            }
-                            setLanguage(l.id);
-                          }}
-                          style={[
-                            styles.segmentItem,
-                            isSelected && styles.segmentItemSelected,
-                          ]}>
-                          <Text
+                    <View style={styles.optionsRow}>
+                      {languages.map((l) => {
+                        const isSelected = language === l.id;
+                        return (
+                          <Pressable
+                            accessibilityRole="button"
+                            key={l.id}
+                            onPress={async () => {
+                              if (Platform.OS !== 'web') {
+                                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                              }
+                              setLanguage(l.id);
+                            }}
                             style={[
-                              styles.segmentText,
-                              isSelected ? styles.segmentTextSelected : styles.segmentTextUnselected,
+                              styles.languageChip,
+                              {
+                                backgroundColor: isSelected ? `${colors.primary}12` : colors.surfaceAlt,
+                                borderColor: isSelected ? colors.primary : colors.border,
+                              },
                             ]}>
-                            {l.label}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                            <View style={styles.chipTextWrap}>
+                              <Text
+                                style={[
+                                  styles.languageChipTitle,
+                                  { color: isSelected ? colors.primary : colors.text },
+                                ]}>
+                                {l.label}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.languageChipSub,
+                                  { color: isSelected ? colors.primary : colors.textMuted },
+                                ]}>
+                                {l.sub}
+                              </Text>
+                            </View>
+                            {isSelected ? (
+                              <View style={[styles.chipCheck, { backgroundColor: colors.primary }]}>
+                                <Check color="#FFFFFF" size={12} strokeWidth={3} />
+                              </View>
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
 
-                  {/* Currency Segmented Control */}
-                  <Text style={[styles.selectorLabel, { marginTop: 14 }]}>
-                    {t.onboarding.currencyLabel}
-                  </Text>
-                  <View style={styles.segmentContainer}>
-                    {currencies.map((c) => {
-                      const isSelected = selectedCurrency === c;
-                      return (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={c}
-                          onPress={async () => {
-                            if (Platform.OS !== 'web') {
-                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-                                () => {},
-                              );
-                            }
-                            updateCurrency(c);
-                          }}
-                          style={[
-                            styles.segmentItem,
-                            isSelected && styles.segmentItemSelected,
-                          ]}>
-                          <Text
+                  <View style={[styles.levelDivider, { backgroundColor: colors.border }]} />
+
+                  {/* Currency Selector */}
+                  <View style={styles.preferenceSection}>
+                    <View style={styles.preferenceHeader}>
+                      <Wallet color={colors.primary} size={16} strokeWidth={2.2} />
+                      <Text style={[styles.preferenceLabel, { color: colors.text }]}>
+                        {t.onboarding.currencyLabel}
+                      </Text>
+                    </View>
+
+                    <View style={styles.currencyGrid}>
+                      {currencies.map((c) => {
+                        const isSelected = selectedCurrency === c.code;
+                        return (
+                          <Pressable
+                            accessibilityRole="button"
+                            key={c.code}
+                            onPress={async () => {
+                              if (Platform.OS !== 'web') {
+                                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                              }
+                              updateCurrency(c.code);
+                            }}
                             style={[
-                              styles.segmentText,
-                              isSelected ? styles.segmentTextSelected : styles.segmentTextUnselected,
+                              styles.currencyChip,
+                              {
+                                backgroundColor: isSelected ? `${colors.primary}12` : colors.surfaceAlt,
+                                borderColor: isSelected ? colors.primary : colors.border,
+                              },
                             ]}>
-                            {`${getCurrencySymbol(c)} ${c}`}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                            <Text
+                              style={[
+                                styles.currencySymbolText,
+                                { color: isSelected ? colors.primary : colors.textMuted },
+                              ]}>
+                              {getCurrencySymbol(c.code)}
+                            </Text>
+                            <View style={styles.currencyNameWrap}>
+                              <Text
+                                style={[
+                                  styles.currencyCodeText,
+                                  { color: isSelected ? colors.primary : colors.text },
+                                ]}>
+                                {c.code}
+                              </Text>
+                              <Text style={[styles.currencySubText, { color: colors.textMuted }]}>
+                                {c.name}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
-                </GlassCard>
+                </View>
               </View>
             );
           }}
         />
 
-        {/* Bottom Bar: Animated Pagination Dots & CTA */}
+        {/* Bottom Navigation & CTA */}
         <View style={styles.bottomBar}>
           <View style={styles.dotsWrapper}>
             {[0, 1, 2].map((idx) => {
@@ -314,33 +483,23 @@ export default function OnboardingScreen() {
                   key={idx}
                   style={[
                     styles.dot,
-                    isActive ? styles.dotActive : styles.dotInactive,
+                    isActive
+                      ? [styles.dotActive, { backgroundColor: colors.primary }]
+                      : [styles.dotInactive, { backgroundColor: colors.border }],
                   ]}
                 />
               );
             })}
           </View>
 
-          {currentIndex === 2 ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={completeOnboarding}
-              style={styles.whiteCtaButton}>
-              <Text style={[styles.whiteCtaText, { color: colors.primary }]}>
-                {t.onboarding.getStarted}
-              </Text>
-            </Pressable>
-          ) : (
-            <GradientButton
-              icon={ArrowRight}
-              onPress={handleNext}
-              style={styles.ctaButton}
-              title={t.onboarding.continue}
-              variant="secondary"
-            />
-          )}
+          <GradientButton
+            icon={currentIndex === 2 ? Check : ArrowRight}
+            onPress={currentIndex === 2 ? completeOnboarding : handleNext}
+            title={currentIndex === 2 ? t.onboarding.getStarted : t.onboarding.continue}
+            variant="primary"
+          />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -348,44 +507,51 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
   },
-  safeArea: {
+  mainWrapper: {
     flex: 1,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Tokens.spacing.xl,
-    paddingTop: Tokens.spacing.md,
+    paddingHorizontal: Tokens.spacing.lg,
+    paddingTop: Tokens.spacing.xs,
+    paddingBottom: Tokens.spacing.sm,
     minHeight: Tokens.touchTarget,
   },
   brandBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Tokens.radius.full,
+    borderWidth: 1,
+  },
+  brandIconDot: {
+    width: 20,
+    height: 20,
+    borderRadius: Tokens.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: Tokens.typography.bodySm.fontSize,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   skipBtn: {
     minHeight: Tokens.touchTarget,
     minWidth: Tokens.touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Tokens.spacing.sm,
+    paddingHorizontal: Tokens.spacing.md,
+    borderRadius: Tokens.radius.full,
+    borderWidth: 1,
   },
   skipText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: Tokens.typography.body.fontSize,
+    fontSize: Tokens.typography.bodySm.fontSize,
     fontWeight: '600',
   },
   slideList: {
@@ -394,184 +560,291 @@ const styles = StyleSheet.create({
   slide: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Tokens.spacing.xl,
+    justifyContent: 'space-between',
+    paddingHorizontal: Tokens.spacing.lg,
     paddingVertical: Tokens.spacing.sm,
   },
-  iconCircle: {
-    width: 120,
-    height: 120,
+  slideHeaderBlock: {
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: Tokens.spacing.sm,
+  },
+  categoryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: Tokens.radius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Tokens.spacing.lg,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: Tokens.spacing.sm,
   },
-  levelIconsHero: {
-    height: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Tokens.spacing.lg,
-  },
-  heroEmojiLarge: {
-    fontSize: 44,
-    letterSpacing: 8,
+  categoryPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   slideHeadline: {
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: '800',
-    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: Tokens.spacing.sm,
-    maxWidth: 320,
+    marginBottom: Tokens.spacing.xs,
   },
   slideDesc: {
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '400',
     textAlign: 'center',
     maxWidth: 320,
-    marginBottom: Tokens.spacing.xl,
   },
-  glassFeatureCard: {
+  previewFrame: {
     width: '100%',
-    maxWidth: 340,
-    padding: Tokens.spacing.lg,
+    maxWidth: 350,
+    borderRadius: Tokens.radius.card,
+    borderWidth: 1,
+    padding: Tokens.spacing.md,
     gap: Tokens.spacing.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      default: {},
+    }),
   },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Tokens.spacing.md,
-  },
-  featureIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: Tokens.radius.full,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureItemText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-    lineHeight: 18,
-  },
-  levelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Tokens.spacing.md,
-  },
-  levelBullet: {
-    fontSize: 20,
-  },
-  levelTextContainer: {
-    flex: 1,
-    gap: 2,
-  },
-  levelName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  levelSub: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 12,
-  },
-  selectorLabel: {
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: Tokens.radius.md,
-    padding: 3,
+  miniHeroCard: {
+    padding: Tokens.spacing.md,
+    borderRadius: Tokens.radius.lg,
+    borderWidth: 1,
     gap: 4,
   },
-  segmentItem: {
+  miniHeroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  miniHeroLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  miniSurplusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Tokens.radius.full,
+  },
+  miniSurplusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  miniHeroBalance: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  miniCashflowRow: {
+    flexDirection: 'row',
+    gap: Tokens.spacing.sm,
+  },
+  miniCashflowBox: {
     flex: 1,
-    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Tokens.spacing.sm,
+    padding: Tokens.spacing.sm,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1,
+  },
+  miniCashflowIconWrap: {
+    width: 28,
+    height: 28,
     borderRadius: Tokens.radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentItemSelected: {
-    backgroundColor: '#FFFFFF',
+  miniCashflowLabel: {
+    fontSize: 10,
+    fontWeight: '600',
   },
-  segmentText: {
+  miniCashflowAmount: {
     fontSize: 13,
     fontWeight: '700',
   },
-  segmentTextSelected: {
-    color: '#0F172A',
+  miniTxList: {
+    gap: 0,
   },
-  segmentTextUnselected: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  miniTxItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: Tokens.spacing.sm,
+  },
+  miniTxIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: Tokens.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniTxDetails: {
+    flex: 1,
+  },
+  miniTxTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  miniTxMeta: {
+    fontSize: 11,
+    fontWeight: '400',
+  },
+  miniTxAmount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  levelCardItem: {
+    gap: 6,
+  },
+  levelItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  levelBadgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  levelIndicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Tokens.radius.full,
+  },
+  levelItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  levelPercentText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: Tokens.radius.full,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: Tokens.radius.full,
+  },
+  levelItemSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  levelDivider: {
+    height: 1,
+    width: '100%',
+  },
+  preferenceSection: {
+    gap: Tokens.spacing.sm,
+  },
+  preferenceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  preferenceLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    gap: Tokens.spacing.sm,
+  },
+  languageChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Tokens.spacing.sm,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1.5,
+  },
+  chipTextWrap: {
+    gap: 1,
+  },
+  languageChipTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  languageChipSub: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  chipCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: Tokens.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currencyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Tokens.spacing.sm,
+  },
+  currencyChip: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: Tokens.spacing.sm,
+    borderRadius: Tokens.radius.md,
+    borderWidth: 1.5,
+  },
+  currencySymbolText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  currencyNameWrap: {
+    gap: 1,
+  },
+  currencyCodeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  currencySubText: {
+    fontSize: 10,
+    fontWeight: '500',
   },
   bottomBar: {
-    paddingHorizontal: Tokens.spacing.xl,
-    paddingBottom: Tokens.spacing.xl,
+    paddingHorizontal: Tokens.spacing.lg,
     paddingTop: Tokens.spacing.sm,
-    gap: Tokens.spacing.lg,
+    gap: Tokens.spacing.md,
   },
   dotsWrapper: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   dot: {
-    height: 8,
+    height: 6,
     borderRadius: Tokens.radius.full,
   },
   dotActive: {
-    width: 28,
-    backgroundColor: '#FFFFFF',
+    width: 24,
   },
   dotInactive: {
-    width: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
-  },
-  ctaButton: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-  },
-  whiteCtaButton: {
-    minHeight: 52,
-    borderRadius: Tokens.radius.full,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Tokens.spacing.xxl,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-      default: {},
-    }),
-  },
-  whiteCtaText: {
-    fontSize: Tokens.typography.bodyLg.fontSize,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    width: 6,
   },
 });
+

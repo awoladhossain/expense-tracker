@@ -30,7 +30,6 @@ import { TransactionListItem } from '@/components/transaction-list-item';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { GlassCard } from '@/components/ui/glass-card';
-import { SectionHeader } from '@/components/ui/section-header';
 import { SkeletonLoader } from '@/components/ui/skeleton-loader';
 import { useThemeColor } from '@/constants/colors';
 import {
@@ -438,25 +437,38 @@ export default function HomeScreen() {
               )}
             </GlassCard>
 
-            {/* Recent Transactions List with Swipe Actions */}
-            <SectionHeader
-              title={t.home.recentTransactions}
-              actionLabel={recent.length > 0 ? t.home.seeAll : undefined}
-              onAction={recent.length > 0 ? () => router.push('/history') : undefined}
-            />
+            <View style={styles.recentHeader}>
+              <Text numberOfLines={1} style={[styles.recentTitle, { color: colors.text }]}>
+                {t.home.recentTransactions}
+              </Text>
+              <View style={styles.recentActions}>
+                {recent.length > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => router.push('/history')}
+                    style={styles.seeAllButton}>
+                    <Text style={[styles.seeAllLabel, { color: colors.primary }]}>{t.home.seeAll}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/add')}
+                  style={[styles.recentAdd, { backgroundColor: colors.primary }]}>
+                  <Plus color="#FFFFFF" size={16} />
+                  <Text style={styles.recentAddLabel}>{t.common.add}</Text>
+                </Pressable>
+              </View>
+            </View>
 
             {recent.length === 0 ? (
               <EmptyState
-                ctaIcon={Plus}
                 icon={Wallet}
                 title={language === 'bn' ? 'কোনো লেনদেন নেই' : 'No transactions yet'}
                 description={
                   language === 'bn'
-                    ? 'আপনার প্রথম খরচ বা আয়ের হিসাব সংরক্ষণ করতে যোগ করুন বাটনে চাপুন।'
-                    : 'Tap the button below to record your first income or expense.'
+                    ? 'উপরে ডানের যোগ বাটনে চাপ দিয়ে প্রথম লেনদেন যোগ করুন।'
+                    : 'Tap Add on the right to record your first income or expense.'
                 }
-                ctaLabel={t.addExpense.title}
-                onCta={() => router.push('/add')}
               />
             ) : (
               <View style={styles.recentList}>
@@ -480,7 +492,7 @@ const styles = StyleSheet.create({
   content: {
     padding: Tokens.spacing.lg,
     gap: Tokens.spacing.xxl,
-    paddingBottom: Tokens.spacing.section,
+    paddingBottom: 100,
   },
   skeletonContainer: {
     gap: Tokens.spacing.lg,
@@ -677,6 +689,50 @@ const styles = StyleSheet.create({
   levelProgressFill: {
     height: '100%',
     borderRadius: Tokens.radius.full,
+  },
+  recentHeader: {
+    minHeight: Tokens.touchTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Tokens.spacing.sm,
+  },
+  recentTitle: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: '700',
+  },
+  recentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Tokens.spacing.sm,
+  },
+  seeAllButton: {
+    height: 36,
+    paddingHorizontal: Tokens.spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seeAllLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  recentAdd: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    borderRadius: Tokens.radius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  recentAddLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
   },
   recentList: {
     gap: Tokens.spacing.sm,

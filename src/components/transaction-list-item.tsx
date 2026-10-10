@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { CategoryIcon } from '@/components/category-icon';
 import { useThemeColor } from '@/constants/colors';
@@ -30,7 +32,7 @@ export function TransactionListItem({
   const colors = useThemeColor();
   const { language, t } = useI18n();
   const currency = useSettingsStore((state) => state.currency);
-  const swipeableRef = useRef<Swipeable>(null);
+  const swipeableRef = useRef<SwipeableMethods>(null);
 
   const name =
     language === 'bn'
@@ -92,7 +94,7 @@ export function TransactionListItem({
   );
 
   return (
-    <Swipeable
+    <ReanimatedSwipeable
       ref={swipeableRef}
       friction={2}
       overshootFriction={8}
@@ -139,7 +141,7 @@ export function TransactionListItem({
           {isIncome ? `+${amount}` : `−${amount}`}
         </Text>
       </Pressable>
-    </Swipeable>
+    </ReanimatedSwipeable>
   );
 }
 

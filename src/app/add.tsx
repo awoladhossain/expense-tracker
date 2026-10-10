@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryIcon } from '@/components/category-icon';
 import { Screen } from '@/components/screen';
@@ -30,6 +31,7 @@ import { formatMoney, getCurrencySymbol, parseAmount } from '@/utils/currency';
 import { addDays, formatDate, todayISO } from '@/utils/date';
 
 export default function AddScreen() {
+  const insets = useSafeAreaInsets();
   const colors = useThemeColor();
   const { language, t } = useI18n();
   const currency = useSettingsStore((state) => state.currency);
@@ -266,19 +268,27 @@ export default function AddScreen() {
             </Pressable>
           </View>
 
-          {/* Validation Error Message */}
+          </ScrollView>
+        <View
+          style={[
+            styles.footer,
+            {
+              backgroundColor: colors.background,
+              borderTopColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
+          ]}>
           {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
-
-          {/* Save Button */}
           <GradientButton
-            title={type === 'income' ? t.addExpense.saveIncome : t.addExpense.saveExpense}
-            onPress={save}
-            loading={saving}
             disabled={saving}
-            variant="primary"
+            icon={Check}
+            loading={saving}
+            onPress={save}
             style={styles.saveButton}
+            title={type === 'income' ? t.addExpense.saveIncome : t.addExpense.saveExpense}
+            variant="primary"
           />
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -301,7 +311,7 @@ const styles = StyleSheet.create({
   content: {
     padding: Tokens.spacing.lg,
     gap: Tokens.spacing.md,
-    paddingBottom: Tokens.spacing.section,
+    paddingBottom: Tokens.spacing.lg,
   },
   title: {
     fontSize: Tokens.typography.headline.fontSize,
@@ -421,7 +431,15 @@ const styles = StyleSheet.create({
     lineHeight: Tokens.typography.body.lineHeight,
     fontWeight: '600',
   },
+  footer: {
+    paddingHorizontal: Tokens.spacing.lg,
+    paddingTop: Tokens.spacing.sm,
+    paddingBottom: Tokens.spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: Tokens.spacing.sm,
+  },
   saveButton: {
-    marginTop: Tokens.spacing.sm,
+    width: '100%',
+    alignSelf: 'stretch',
   },
 });

@@ -1,6 +1,7 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react-native';
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GradientButton } from '@/components/ui/gradient-button';
 import { Colors } from '@/constants/colors';

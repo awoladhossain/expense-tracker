@@ -65,8 +65,9 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
     paddingVertical: Tokens.spacing.section,
-    paddingHorizontal: Tokens.spacing.xl,
+    paddingHorizontal: 0,
     gap: Tokens.spacing.md,
   },
   iconContainer: {
@@ -93,10 +94,7 @@ const styles = StyleSheet.create({
   },
   ctaButton: {
     marginTop: Tokens.spacing.sm,
-    alignSelf: 'center',
-    minHeight: 48,
-    height: 48,
-    paddingHorizontal: Tokens.spacing.xxl,
-    borderRadius: Tokens.radius.full,
+    width: '100%',
+    alignSelf: 'stretch',
   },
 });
